@@ -15,13 +15,24 @@ npm install          # install Chart.js (required before loading extension)
 No build step. Load the extension in Firefox:
 1. `about:debugging#/runtime/this-firefox` → Load Temporary Add-on → select `manifest.json`
 2. Navigate to an eBay sold/completed search (both `LH_Complete=1` and `LH_Sold=1` must be in the URL)
-3. After editing `scatterplot.js`, click "Reload" on the extension card
+3. After editing any `src/*.js` file, click "Reload" on the extension card
 
 To update Chart.js: `npm update chart.js` then reload the extension.
 
 ## Architecture
 
-Single content script (`scatterplot.js`) wrapped in an IIFE. Loads only when both `LH_Complete=1` and `LH_Sold=1` are in the URL. Chart.js is loaded first via the manifest (`node_modules/chart.js/dist/chart.umd.min.js`) so `window.Chart` is available synchronously — no CDN injection (eBay's CSP blocks it).
+Content scripts in `src/` loaded sequentially by the manifest. All files share the same content script sandbox scope (no IIFE, no modules needed). Loads only when both `LH_Complete=1` and `LH_Sold=1` are in the URL (guard in `src/init.js`). Chart.js is loaded first via the manifest (`node_modules/chart.js/dist/chart.umd.min.js`) so `window.Chart` is available synchronously — no CDN injection (eBay's CSP blocks it).
+
+**Source files (load order matches manifest):**
+- `src/constants.js` — shared constants (STORAGE_KEY, DOCK_KEY, etc.)
+- `src/storage.js` — `loadItems`, `saveItems`
+- `src/extract.js` — DOM extraction helpers (`extractItemData` and friends)
+- `src/styles.js` — `injectStyles` (all CSS)
+- `src/chart.js` — `chartInstance`, `renderChart`
+- `src/dock.js` — `dockSide` state, `nearestEdge`, `setDockSide`
+- `src/checkboxes.js` — `injectCheckbox`, `clearAll`, `syncPlotAll`, `buildPlotAllControl`
+- `src/panel.js` — `buildPanel` (DOM + resize/drag/toggle interaction)
+- `src/init.js` — URL guard, init sequence, MutationObservers
 
 **Key design decisions:**
 - DOM selectors are class-based for the container (`ul.srp-results`) and individual item fields, but extraction falls back to content-based heuristics: date found by "Sold " text prefix on leaf elements, price found by `$X.XX` pattern on leaf elements, shipping by "delivery"/"shipping" keyword. This makes the extension resilient to eBay class renames.

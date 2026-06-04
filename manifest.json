@@ -22,7 +22,18 @@
   "content_scripts": [
     {
       "matches": ["*://*.ebay.com/*"],
-      "js": ["node_modules/chart.js/dist/chart.umd.min.js", "scatterplot.js"]
+      "js": [
+        "node_modules/chart.js/dist/chart.umd.min.js",
+        "src/constants.js",
+        "src/storage.js",
+        "src/extract.js",
+        "src/styles.js",
+        "src/chart.js",
+        "src/dock.js",
+        "src/checkboxes.js",
+        "src/panel.js",
+        "src/init.js"
+      ]
     }
   ]
 }
