@@ -2,7 +2,33 @@
   "name": "ebay-scatterplot",
   "version": "1.0.0",
   "private": true,
+  "scripts": {
+    "vendor": "node scripts/vendor.mjs",
+    "postinstall": "node scripts/vendor.mjs",
+    "lint": "web-ext lint",
+    "build": "npm run vendor && web-ext build --overwrite-dest",
+    "sign": "web-ext sign --channel=listed"
+  },
   "dependencies": {
     "chart.js": "^4.5.1"
+  },
+  "devDependencies": {
+    "web-ext": "^8.0.0"
+  },
+  "webExt": {
+    "ignoreFiles": [
+      "node_modules/**",
+      "scripts",
+      "scripts/**",
+      ".claude/**",
+      ".git/**",
+      "web-ext-artifacts/**",
+      "package.json",
+      "package-lock.json",
+      ".gitignore",
+      "README.md",
+      "ARCHITECTURE.md",
+      "CLAUDE.md"
+    ]
   }
 }
