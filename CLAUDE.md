@@ -34,8 +34,10 @@ Packaging ignores are under `webExt.ignoreFiles` in `package.json` — `node_mod
 ## Testing
 
 ```bash
-npm test    # node:test runner, pinned to TZ=Australia/Sydney
+npm test    # node:test runner; cross-env pins TZ=Australia/Sydney (cross-platform)
 ```
+
+Requires **Node ≥ 21** (declared in `package.json` `engines`): the test-file glob is expanded by Node's test runner, not the shell, so the script double-quotes it to work in both POSIX `sh` and Windows `cmd`.
 
 Unit tests cover the pure extraction functions in `src/extract.js` (the heuristic, eBay-markup-fragile core). Files live in `test/`:
 - `test/extract.test.mjs` — the cases (`parseAmount`, `extractPrice`, `extractDate`, `extractItemId`, `extractTitle`, `extractItemData`)

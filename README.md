@@ -2,6 +2,8 @@
 
 A Firefox extension that adds a price history panel to eBay sold/completed search results. Select listings to plot their sale prices over time.
 
+> **eBay.com only.** International eBay sites (ebay.co.uk, ebay.de, …) aren't supported — the extension matches `*://*.ebay.com/sch/*`, and its date/price/keyword parsing assumes the US English layout.
+
 ## Features
 
 - **Scatterplot panel** docked to any edge of the screen (top, right, bottom, left)

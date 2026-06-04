@@ -3,18 +3,22 @@
   "version": "1.0.0",
   "private": true,
   "license": "MIT",
+  "engines": {
+    "node": ">=21"
+  },
   "scripts": {
     "vendor": "node scripts/vendor.mjs",
     "postinstall": "node scripts/vendor.mjs",
     "lint": "web-ext lint",
     "build": "npm run vendor && web-ext build --overwrite-dest",
     "sign": "web-ext sign --channel=listed",
-    "test": "TZ=Australia/Sydney node --test 'test/**/*.test.mjs'"
+    "test": "cross-env TZ=Australia/Sydney node --test \"test/**/*.test.mjs\""
   },
   "dependencies": {
     "chart.js": "^4.5.1"
   },
   "devDependencies": {
+    "cross-env": "^10.1.0",
     "jsdom": "^29.1.1",
     "web-ext": "^10.3.0"
   },

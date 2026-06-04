@@ -30,6 +30,24 @@ function buildPanel() {
   preview.id = 'ebay-scatter-snap-preview';
   document.body.appendChild(preview);
 
+  // Shows the snap-target overlay when the cursor is near a viewport edge.
+  const showSnapPreview = (e) => {
+    const edge = nearestEdge(e.clientX, e.clientY);
+    const dist = {
+      left: e.clientX,
+      right: window.innerWidth - e.clientX,
+      top: e.clientY,
+      bottom: window.innerHeight - e.clientY,
+    }[edge];
+
+    if (dist < SNAP_THRESHOLD) {
+      preview.className = 'snap-' + edge;
+      preview.style.display = 'block';
+    } else {
+      preview.style.display = 'none';
+    }
+  };
+
   document
     .getElementById('ebay-scatter-close')
     .addEventListener('click', () => {
@@ -65,59 +83,6 @@ function buildPanel() {
     e.stopPropagation();
   });
 
-  document.addEventListener('mousemove', (e) => {
-    if (!isResizing) {
-      return;
-    }
-
-    let newDim;
-    switch (dockSide) {
-      case 'right': {
-        newDim = resizeStartDim + (resizeStartPos - e.clientX);
-        break;
-      }
-      case 'left': {
-        newDim = resizeStartDim + (e.clientX - resizeStartPos);
-        break;
-      }
-      case 'top': {
-        newDim = resizeStartDim + (e.clientY - resizeStartPos);
-        break;
-      }
-      case 'bottom': {
-        newDim = resizeStartDim + (resizeStartPos - e.clientY);
-        break;
-      }
-      default: {
-        newDim = resizeStartDim + (resizeStartPos - e.clientX);
-        console.warn('[panel.js] Invalid dockSide');
-      }
-    }
-
-    const horiz = dockSide === 'left' || dockSide === 'right';
-    newDim = Math.max(
-      horiz ? 200 : 120,
-      Math.min(
-        horiz ? window.innerWidth * 0.7 : window.innerHeight * 0.7,
-        newDim,
-      ),
-    );
-    panel.style[horiz ? 'width' : 'height'] = newDim + 'px';
-
-    if (chartInstance) {
-      chartInstance.resize();
-    }
-  });
-
-  document.addEventListener('mouseup', () => {
-    if (!isResizing) {
-      return;
-    }
-
-    isResizing = false;
-    resizeHandle.classList.remove('resizing');
-  });
-
   // ── Toggle drag ──────────────────────────────────────────────────────────────
   let isToggleDragging = false;
   let toggleDragMoved = false;
@@ -139,45 +104,6 @@ function buildPanel() {
       toggle.classList.remove(c),
     );
     e.preventDefault();
-  });
-
-  document.addEventListener('mousemove', (e) => {
-    if (!isToggleDragging) {
-      return;
-    }
-
-    toggleDragMoved = true;
-    toggle.style.left = e.clientX - toggleDragOffX + 'px';
-    toggle.style.top = e.clientY - toggleDragOffY + 'px';
-
-    const edge = nearestEdge(e.clientX, e.clientY);
-    const dist = {
-      left: e.clientX,
-      right: window.innerWidth - e.clientX,
-      top: e.clientY,
-      bottom: window.innerHeight - e.clientY,
-    }[edge];
-
-    if (dist < SNAP_THRESHOLD) {
-      preview.className = 'snap-' + edge;
-      preview.style.display = 'block';
-    } else {
-      preview.style.display = 'none';
-    }
-  });
-
-  document.addEventListener('mouseup', (e) => {
-    if (!isToggleDragging) {
-      return;
-    }
-
-    isToggleDragging = false;
-    preview.style.display = 'none';
-
-    if (toggleDragMoved) {
-      setDockSide(nearestEdge(e.clientX, e.clientY));
-      // toggle.style.display stays "block" — panel remains closed
-    }
   });
 
   // ── Drag to dock ─────────────────────────────────────────────────────────────
@@ -213,42 +139,80 @@ function buildPanel() {
     e.preventDefault();
   });
 
+  // ── Shared drag/resize handlers ──────────────────────────────────────────────
+  // One mousemove + one mouseup dispatch on whichever operation is active. The
+  // flags are mutually exclusive — each mousedown starts exactly one.
   document.addEventListener('mousemove', (e) => {
-    if (!isDragging) {
-      return;
-    }
+    if (isResizing) {
+      let newDim;
+      switch (dockSide) {
+        case 'right': {
+          newDim = resizeStartDim + (resizeStartPos - e.clientX);
+          break;
+        }
+        case 'left': {
+          newDim = resizeStartDim + (e.clientX - resizeStartPos);
+          break;
+        }
+        case 'top': {
+          newDim = resizeStartDim + (e.clientY - resizeStartPos);
+          break;
+        }
+        case 'bottom': {
+          newDim = resizeStartDim + (resizeStartPos - e.clientY);
+          break;
+        }
+        default: {
+          newDim = resizeStartDim + (resizeStartPos - e.clientX);
+          console.warn('[panel.js] Invalid dockSide');
+        }
+      }
 
-    panelDragMoved = true;
-    panel.style.left = e.clientX - dragOffsetX + 'px';
-    panel.style.top = e.clientY - dragOffsetY + 'px';
+      const horiz = dockSide === 'left' || dockSide === 'right';
+      newDim = Math.max(
+        horiz ? 200 : 120,
+        Math.min(
+          horiz ? window.innerWidth * 0.7 : window.innerHeight * 0.7,
+          newDim,
+        ),
+      );
+      panel.style[horiz ? 'width' : 'height'] = newDim + 'px';
 
-    const edge = nearestEdge(e.clientX, e.clientY);
-    const dist = {
-      left: e.clientX,
-      right: window.innerWidth - e.clientX,
-      top: e.clientY,
-      bottom: window.innerHeight - e.clientY,
-    }[edge];
-
-    if (dist < SNAP_THRESHOLD) {
-      preview.className = 'snap-' + edge;
-      preview.style.display = 'block';
-    } else {
-      preview.style.display = 'none';
+      if (chartInstance) {
+        chartInstance.resize();
+      }
+    } else if (isToggleDragging) {
+      toggleDragMoved = true;
+      toggle.style.left = e.clientX - toggleDragOffX + 'px';
+      toggle.style.top = e.clientY - toggleDragOffY + 'px';
+      showSnapPreview(e);
+    } else if (isDragging) {
+      panelDragMoved = true;
+      panel.style.left = e.clientX - dragOffsetX + 'px';
+      panel.style.top = e.clientY - dragOffsetY + 'px';
+      showSnapPreview(e);
     }
   });
 
   document.addEventListener('mouseup', (e) => {
-    if (!isDragging) {
-      return;
+    if (isResizing) {
+      isResizing = false;
+      resizeHandle.classList.remove('resizing');
+    } else if (isToggleDragging) {
+      isToggleDragging = false;
+      preview.style.display = 'none';
+      if (toggleDragMoved) {
+        setDockSide(nearestEdge(e.clientX, e.clientY));
+        // toggle.style.display stays "block" — panel remains closed
+      }
+    } else if (isDragging) {
+      isDragging = false;
+      header.classList.remove('dragging');
+      panel.classList.remove('dragging');
+      preview.style.display = 'none';
+      // Only re-dock on an actual drag; a plain click restores the current side
+      // (clearing the inline pixel styles the mousedown pinned), so it's a no-op.
+      setDockSide(panelDragMoved ? nearestEdge(e.clientX, e.clientY) : dockSide);
     }
-
-    isDragging = false;
-    header.classList.remove('dragging');
-    panel.classList.remove('dragging');
-    preview.style.display = 'none';
-    // Only re-dock on an actual drag; a plain click restores the current side
-    // (clearing the inline pixel styles the mousedown pinned), so it's a no-op.
-    setDockSide(panelDragMoved ? nearestEdge(e.clientX, e.clientY) : dockSide);
   });
 }

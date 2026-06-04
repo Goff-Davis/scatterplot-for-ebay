@@ -41,7 +41,8 @@ function parseAmount(text) {
 
 function extractPrice(card) {
   // Find a leaf element whose entire text is a bare dollar amount: "$107.94"
-  const priceEl = leafElements(card, 'span, div').find((el) =>
+  const leaves = leafElements(card, 'span, div');
+  const priceEl = leaves.find((el) =>
     /^\$[\d,]+\.?\d*$/.test(el.textContent.trim()),
   );
 
@@ -71,7 +72,7 @@ function extractPrice(card) {
 
   // Find shipping: leaf element containing "delivery" or "shipping" and a "$" amount
   let shipping = 0;
-  for (const el of leafElements(card, 'span, div')) {
+  for (const el of leaves) {
     const text = el.textContent.trim();
 
     if (/free\s+(delivery|shipping)/i.test(text)) {
