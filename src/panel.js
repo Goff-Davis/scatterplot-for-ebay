@@ -183,6 +183,7 @@ function buildPanel() {
   // ── Drag to dock ─────────────────────────────────────────────────────────────
   const header = panel.querySelector('header');
   let isDragging = false;
+  let panelDragMoved = false;
   let dragOffsetX = 0,
     dragOffsetY = 0;
 
@@ -192,6 +193,7 @@ function buildPanel() {
     }
 
     isDragging = true;
+    panelDragMoved = false;
     const rect = panel.getBoundingClientRect();
     dragOffsetX = e.clientX - rect.left;
     dragOffsetY = e.clientY - rect.top;
@@ -216,6 +218,7 @@ function buildPanel() {
       return;
     }
 
+    panelDragMoved = true;
     panel.style.left = e.clientX - dragOffsetX + 'px';
     panel.style.top = e.clientY - dragOffsetY + 'px';
 
@@ -244,6 +247,8 @@ function buildPanel() {
     header.classList.remove('dragging');
     panel.classList.remove('dragging');
     preview.style.display = 'none';
-    setDockSide(nearestEdge(e.clientX, e.clientY));
+    // Only re-dock on an actual drag; a plain click restores the current side
+    // (clearing the inline pixel styles the mousedown pinned), so it's a no-op.
+    setDockSide(panelDragMoved ? nearestEdge(e.clientX, e.clientY) : dockSide);
   });
 }

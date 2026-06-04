@@ -45,21 +45,24 @@ function injectCheckbox(card) {
   attrArea.appendChild(label);
 
   cb.addEventListener('change', () => {
-    clearTimeout(debounceTimer);
+    // Persist immediately, per change. The debounceTimer is shared by every
+    // checkbox, so coalescing the storage write would drop all but the last
+    // toggle in a fast multi-select; only the expensive redraw is debounced.
+    const items = loadItems();
 
-    debounceTimer = setTimeout(() => {
-      const items = loadItems();
-
-      if (cb.checked) {
-        if (!items.some((i) => i.id === data.id)) {
-          items.push(data);
-          saveItems(items);
-        }
-      } else {
-        saveItems(items.filter((i) => i.id !== id));
+    if (cb.checked) {
+      if (!items.some((i) => i.id === data.id)) {
+        items.push(data);
+        saveItems(items);
       }
+    } else {
+      saveItems(items.filter((i) => i.id !== id));
+    }
 
-      reconcileCheckboxes();
+    reconcileCheckboxes();
+
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
       renderChart(loadItems());
       syncPlotAll();
     }, 150);

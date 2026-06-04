@@ -69,7 +69,7 @@ Content scripts in `src/` are loaded sequentially by the manifest. All files sha
 - Left/right docks: 320px wide, full viewport height (portrait layout)
 - Top/bottom docks: full viewport width, 280px tall (landscape layout — controls sidebar on the left, chart fills the right)
 
-**Drag to redock:** The `<header>` is the drag handle (cursor: grab). On mousedown it pins the panel to its current pixel position (removing the dock class), then `mousemove` floats it. Within `SNAP_THRESHOLD` (80px) of any edge, a `#ebay-scatter-snap-preview` overlay shows where it will snap. On mouseup, `setDockSide(nearestEdge(...))` is called — the panel always snaps to a side, never free-floats.
+**Drag to redock:** The `<header>` is the drag handle (cursor: grab). On mousedown it pins the panel to its current pixel position (removing the dock class), then `mousemove` floats it. Within `SNAP_THRESHOLD` (80px) of any edge, a `#ebay-scatter-snap-preview` overlay shows where it will snap. On mouseup, if the panel was actually dragged it snaps to the nearest edge (`setDockSide(nearestEdge(...))`); a plain click with no movement restores the current dock — a no-op (guarded by a `panelDragMoved` flag, mirroring the toggle's `toggleDragMoved`). The panel always snaps to a side, never free-floats.
 
 **Toggle button:** The `#ebay-scatter-toggle` (📈) is a tab-shaped button that appears on the docked edge when the panel is closed. Its shape and position are set by `.dock-*` CSS classes (matching the panel's dock side). The toggle is also independently draggable to change the dock side without opening the panel — uses the same snap-preview UX.
 
@@ -89,7 +89,7 @@ Extraction is content-based (resilient to eBay class renames):
 
 ## Checkboxes & "Plot all"
 
-- Per-item checkboxes are injected into each valid listing card. Checking one saves the item to `localStorage`; unchecking removes it. Changes debounce 150ms before updating storage and re-rendering the chart.
+- Per-item checkboxes are injected into each valid listing card. Checking one saves the item to `localStorage` **immediately** (each change persists on its own — `debounceTimer` is shared across all checkboxes, so coalescing the write would drop all but the last toggle in a fast multi-select). Only the chart re-render and `syncPlotAll` are debounced (150ms).
 - `#ebay-scatter-plot-all` is inserted directly before `ul.srp-results` (anchored to the stable list container, not the filter bar which eBay re-renders). It has three states via the native `indeterminate` property: unchecked (none), indeterminate (some), checked (all). `syncPlotAll()` reconciles its state after every change.
 - `clearAll()` wipes localStorage, unchecks all checkboxes, clears the chart.
 

@@ -62,7 +62,7 @@ The active dock side is tracked by `dockSide` in `src/dock.js`. `setDockSide(sid
 
 ## Dragging and snapping
 
-Both the panel header and the toggle button are draggable. When you start dragging, the element detaches from its edge and follows the mouse freely. As the mouse gets within 80px of any viewport edge, a semi-transparent blue overlay (`#ebay-scatter-snap-preview`) appears showing where it will snap. On mouse release, the element always snaps to the nearest edge — there is no free-floating state.
+Both the panel header and the toggle button are draggable. When you start dragging, the element detaches from its edge and follows the mouse freely. As the mouse gets within 80px of any viewport edge, a semi-transparent blue overlay (`#ebay-scatter-snap-preview`) appears showing where it will snap. On mouse release, the element always snaps to the nearest edge — there is no free-floating state. Releasing without having moved (a plain click) leaves the element on its current edge.
 
 ## Resizing
 
@@ -81,7 +81,7 @@ Items that fail any of these checks (missing price, missing date, best-offer) ge
 
 ## Checkboxes and "Plot all"
 
-Each valid listing gets a small "Plot" checkbox injected into its card. Checking it saves the item's data to `localStorage`; unchecking removes it. The chart re-renders after each change.
+Each valid listing gets a small "Plot" checkbox injected into its card. Checking it saves the item's data to `localStorage` immediately (each change persists on its own, so a fast multi-select can't drop selections); unchecking removes it. The chart re-render is debounced (150 ms) so a burst of selections redraws once.
 
 The "Plot all" checkbox sits above the results list and has three visual states using the browser's native `indeterminate` property:
 
