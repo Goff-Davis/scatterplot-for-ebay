@@ -1,4 +1,4 @@
-# eBay Scatterplot
+# Scatterplot for eBay
 
 A Firefox extension that adds a price history panel to eBay sold/completed search results. Select listings to plot their sale prices over time.
 
