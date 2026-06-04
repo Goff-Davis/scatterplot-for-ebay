@@ -19,7 +19,7 @@ This extension is not listed on AMO, so it must be loaded manually as a temporar
 **Prerequisites:** Firefox, Node.js (for npm)
 
 1. Clone or download this repository
-2. Run `npm install` to install Chart.js
+2. Run `npm install` (installs Chart.js plus dev tooling, and copies Chart.js into `vendor/`)
 3. Open Firefox and go to `about:debugging#/runtime/this-firefox`
 4. Click **Load Temporary Add-on** and select `manifest.json` from this folder
 
@@ -40,9 +40,13 @@ The extension will remain active until Firefox is closed. Repeat step 4 after re
 
 ## Development
 
-No build step required. After editing any file in `src/`:
+No build step is needed to develop. After editing any file in `src/`:
 
 1. Go to `about:debugging#/runtime/this-firefox`
 2. Find the extension and click **Reload**
+
+Run the unit tests with `npm test` (covers the data-extraction logic in `src/extract.js`).
+
+To package the extension for distribution, run `npm run lint` and `npm run build`; see [SUBMITTING.md](SUBMITTING.md) for the full Firefox Add-ons (AMO) submission flow.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for a full explanation of how the extension works.

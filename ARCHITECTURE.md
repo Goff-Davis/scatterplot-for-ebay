@@ -8,15 +8,17 @@ This is a Firefox browser extension that adds a price history panel to eBay sold
 
 The extension is declared as a **content script** in `manifest.json`. Firefox injects it into any `ebay.com` page. The script checks the URL before doing anything — it only activates when both `LH_Complete=1` and `LH_Sold=1` are present in the query string (eBay's parameters for "sold/completed" searches).
 
-There is no build step. The source files are loaded directly by Firefox in the order listed in `manifest.json`.
+The extension's own code has no build step — Firefox loads the `src/` files directly, in the order listed in `manifest.json`, with no bundler or transpiler. The one third-party library it ships, Chart.js, is *vendored* (copied into `vendor/`) so it travels with the extension; see *Dependencies and vendoring* below. Packaging the whole thing into a distributable `.zip` is done with `web-ext` (`npm run build`).
 
 ## File structure
 
 ```
-manifest.json          Extension declaration
-package.json           npm (Chart.js dependency only)
-node_modules/
-  chart.js/            Loaded as a content script before the extension code
+manifest.json          Extension declaration (lists the scripts to inject)
+package.json           npm metadata, scripts, and dependencies
+scripts/
+  vendor.mjs           Copies Chart.js from node_modules/ into vendor/
+vendor/
+  chart.js/            Vendored Chart.js — loaded before the extension code, and shipped
 src/
   constants.js         Shared constants
   storage.js           Read/write items to localStorage
@@ -27,6 +29,11 @@ src/
   checkboxes.js        Per-item checkboxes, "Plot all" control
   panel.js             Build the panel DOM and handle all mouse interaction
   init.js              Entry point — URL guard, startup sequence, scroll/pagination observers
+test/
+  extract.test.mjs     Unit tests for the extraction logic
+  helpers/load.mjs     Loads src/extract.js into a jsdom context for testing
+  fixtures/            Real eBay card HTML used by the tests
+node_modules/          Dev dependencies (Chart.js source, web-ext, jsdom) — never shipped
 ```
 
 ## Shared scope
@@ -67,7 +74,7 @@ Rather than relying on eBay's CSS class names (which change frequently), the ext
 
 - **Price** — finds a leaf element whose entire text matches `$X.XX`; skips items where that price has a strikethrough style (best-offer listings)
 - **Shipping** — finds a nearby leaf element containing "delivery" or "shipping" and a `$` amount; recognises "free shipping/delivery" as $0
-- **Date** — finds a leaf element whose text starts with "Sold " and parses the date from it
+- **Date** — finds a leaf element whose text starts with "Sold " and parses the date from it, stored as `YYYY-MM-DD` formatted from local date components (so the stored day matches what eBay displayed, regardless of the user's timezone)
 - **Item ID** — reads `data-listingid` on the card element, with a fallback to parsing the `/itm/<id>` URL
 
 Items that fail any of these checks (missing price, missing date, best-offer) get no checkbox injected. This keeps the "Plot all" checkbox state accurate.
@@ -97,10 +104,32 @@ eBay's search page updates the DOM without full page reloads in two ways:
 1. **Infinite scroll** — new listing cards are appended to `ul.srp-results`. A `MutationObserver` on that element detects new `<li>` children and injects checkboxes into them.
 2. **Pagination** — eBay sometimes replaces the entire `ul.srp-results` element. A second `MutationObserver` on the parent detects this and reconnects the first observer to the new list.
 
-## Dependencies
+## Dependencies and vendoring
 
-| Dependency | Purpose | How it's loaded |
-|------------|---------|-----------------|
-| `chart.js` | Scatterplot rendering | Listed in `manifest.json` before the `src/` files; available as `window.Chart` |
+The extension ships exactly one third-party file: **Chart.js**. It's installed via npm and loaded as a content script (listed in `manifest.json` before the `src/` files, so `window.Chart` is available synchronously). eBay's Content Security Policy blocks loading scripts from a CDN, so Chart.js has to travel inside the extension.
 
-Chart.js is managed with npm (`package.json`) and loaded directly from `node_modules/`. eBay's Content Security Policy blocks CDN script injection, so the file must be bundled with the extension.
+Rather than point the manifest at `node_modules/` (which isn't part of a packaged add-on), a small script — `scripts/vendor.mjs` — copies Chart.js and its license from `node_modules/` into `vendor/chart.js/`, and the manifest loads `vendor/chart.js/chart.umd.min.js`. Vendoring runs automatically on `npm install` (a `postinstall` hook) and again before every `npm run build`, so `vendor/` always matches the installed version.
+
+| Dependency | Type | Purpose |
+|------------|------|---------|
+| `chart.js` | runtime | Scatterplot rendering (vendored into `vendor/`, shipped) |
+| `web-ext` | dev | Lint, build, and sign the extension for Firefox Add-ons |
+| `jsdom` | dev | DOM implementation used by the unit tests |
+
+## Building and packaging
+
+There's no bundler for the extension's own code, but `web-ext` (Mozilla's tool) handles linting and packaging:
+
+- `npm run lint` — checks the extension against Firefox Add-on policies
+- `npm run build` — vendors Chart.js, then produces a `.zip` in `web-ext-artifacts/`
+- `npm run sign` — submits to addons.mozilla.org (AMO) as a listed add-on
+
+`webExt.ignoreFiles` in `package.json` controls what's left out of the package: `node_modules/`, `scripts/`, `test/`, and the docs are excluded; `vendor/` is included. The full submission process is documented in `SUBMITTING.md`.
+
+## Testing
+
+The pure data-extraction functions in `src/extract.js` — the part most likely to break when eBay changes its markup — are covered by unit tests. Run them with `npm test`.
+
+Because the `src/` files have no `export`s (they share one content-script scope), the tests load `src/extract.js` into a jsdom-backed `node:vm` sandbox (`test/helpers/load.mjs`) and call its functions directly. The tests therefore run the exact code that ships, without adding any test-only exports to the source.
+
+Fixtures (`test/fixtures/*.html`) are real listing cards captured from a live sold-search page, then trimmed and made self-contained. The suite is pinned to a positive-offset timezone (`TZ=Australia/Sydney`) so that any regression in the date parsing — which must store the date eBay displayed, not a UTC-shifted one — fails the tests even on machines in the Americas.

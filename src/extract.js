@@ -109,7 +109,13 @@ function extractDate(card) {
   }
 
   const d = new Date(m[1]);
-  return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+
+  if (isNaN(d.getTime())) {
+    return null;
+  }
+
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 function extractItemData(card) {

@@ -29,7 +29,23 @@ Source is formatted with 2-space indent, single quotes, semicolons, and braces o
 - `npm run build` — vendors Chart.js, then `web-ext build` → `web-ext-artifacts/ebay_scatterplot-<version>.zip`
 - `npm run sign` — submits to AMO as a listed add-on (needs `WEB_EXT_API_KEY` / `WEB_EXT_API_SECRET`)
 
-Packaging ignores are under `webExt.ignoreFiles` in `package.json` — `node_modules/`, `scripts/`, and the docs are excluded, but `vendor/` IS shipped. Bump `version` in both `manifest.json` and `package.json` per release. Full AMO submission flow and reviewer notes are in `SUBMITTING.md`.
+Packaging ignores are under `webExt.ignoreFiles` in `package.json` — `node_modules/`, `scripts/`, `test/`, and the docs are excluded, but `vendor/` IS shipped. Bump `version` in both `manifest.json` and `package.json` per release. Full AMO submission flow and reviewer notes are in `SUBMITTING.md`.
+
+## Testing
+
+```bash
+npm test    # node:test runner, pinned to TZ=Australia/Sydney
+```
+
+Unit tests cover the pure extraction functions in `src/extract.js` (the heuristic, eBay-markup-fragile core). Files live in `test/`:
+- `test/extract.test.mjs` — the cases (`parseAmount`, `extractPrice`, `extractDate`, `extractItemId`, `extractTitle`, `extractItemData`)
+- `test/helpers/load.mjs` — loads the real `src/extract.js` into a jsdom-backed `node:vm` context and returns its functions, so the **source stays free of any test-only exports** and tests run the exact shipped code
+- `test/fixtures/*.html` — real listing cards captured from a live sold page, trimmed and self-contained (no external assets), with expected values asserted against the real data
+
+Key conventions:
+- **The `test` script pins `TZ=Australia/Sydney`** (a positive UTC offset) on purpose: `extractDate` must store the displayed calendar date, and the original H1 bug (UTC round-trip via `toISOString()`) only shows up at a positive offset. Running there means any reintroduction fails the date tests even on US machines.
+- **Summed prices are floats** (`item + shipping`), so assert them with a tolerance, never a hand-rounded literal.
+- **Best-offer/strikethrough**: jsdom's `getComputedStyle` reflects inline styles but not class-based stylesheet rules, so the best-offer fixture carries an inline `text-decoration: line-through` (the live page uses a CSS class); `extractPrice` then correctly returns `null`.
 
 ## Architecture
 

@@ -7,19 +7,23 @@
     "postinstall": "node scripts/vendor.mjs",
     "lint": "web-ext lint",
     "build": "npm run vendor && web-ext build --overwrite-dest",
-    "sign": "web-ext sign --channel=listed"
+    "sign": "web-ext sign --channel=listed",
+    "test": "TZ=Australia/Sydney node --test 'test/**/*.test.mjs'"
   },
   "dependencies": {
     "chart.js": "^4.5.1"
   },
   "devDependencies": {
-    "web-ext": "^8.0.0"
+    "jsdom": "^29.1.1",
+    "web-ext": "^10.3.0"
   },
   "webExt": {
     "ignoreFiles": [
       "node_modules/**",
       "scripts",
       "scripts/**",
+      "test",
+      "test/**",
       ".claude/**",
       ".git/**",
       "web-ext-artifacts/**",
