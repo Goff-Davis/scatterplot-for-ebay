@@ -12,7 +12,7 @@
 
   "browser_specific_settings": {
     "gecko": {
-      "id": "{b23e928a-ad3a-454c-ac11-f982e11238db}",
+      "id": "ebay-scatterplot@davisgoff.com",
       "data_collection_permissions": {
         "required": ["none"]
       }
