@@ -1,5 +1,5 @@
 function injectStyles() {
-  const s = document.createElement("style");
+  const s = document.createElement('style');
   s.textContent = `
     #ebay-scatter-panel {
       position: fixed; z-index: 2147483647;
