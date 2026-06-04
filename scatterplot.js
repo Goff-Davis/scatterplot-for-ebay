@@ -2,10 +2,13 @@
   const params = new URLSearchParams(window.location.search);
   if (!params.has("LH_Complete") || !params.has("LH_Sold")) return;
 
-  const RESULTS_SEL = "ul.srp-results";
+  const RESULTS_SEL    = "ul.srp-results";
+  const STORAGE_KEY    = "ebay_scatterplot_items";
+  const MAX_ITEMS      = 200;
+  const DOCK_KEY       = "ebay_scatterplot_dock";
+  const SNAP_THRESHOLD = 80;
 
-  const STORAGE_KEY = "ebay_scatterplot_items";
-  const MAX_ITEMS   = 200;
+  let dockSide = localStorage.getItem(DOCK_KEY) || "right";
 
   // ── localStorage ────────────────────────────────────────────────────────────
 
@@ -20,7 +23,6 @@
 
   // ── Data extraction ──────────────────────────────────────────────────────────
 
-  // Returns leaf elements (no child elements) matching a selector within card.
   function leafElements(card, sel) {
     return Array.from(card.querySelectorAll(sel)).filter(el => el.childElementCount === 0);
   }
@@ -34,7 +36,6 @@
   }
 
   function extractTitle(card) {
-    // Prefer the semantic heading; fall back to aria-label on the card itself
     const heading = card.querySelector("[role='heading'][aria-level='3']");
     if (heading) {
       const clone = heading.cloneNode(true);
@@ -50,13 +51,11 @@
   }
 
   function extractPrice(card) {
-    // Find a leaf element whose entire text is a bare dollar amount: "$107.94"
     const priceEl = leafElements(card, "span, div").find(el =>
       /^\$[\d,]+\.?\d*$/.test(el.textContent.trim())
     );
     if (!priceEl) return null;
 
-    // Best offer: price is crossed out
     let node = priceEl;
     for (let i = 0; i < 4; i++) {
       if (!node) break;
@@ -70,7 +69,6 @@
       return null;
     }
 
-    // Find shipping: leaf element containing "delivery" or "shipping" and a "$" amount
     let shipping = 0;
     for (const el of leafElements(card, "span, div")) {
       const text = el.textContent.trim();
@@ -85,7 +83,6 @@
   }
 
   function extractDate(card) {
-    // Find a leaf element whose text starts with "Sold "
     const el = leafElements(card, "span, div").find(el =>
       /^Sold\b/i.test(el.textContent.trim())
     );
@@ -98,7 +95,7 @@
 
   function extractItemData(card) {
     const id    = extractItemId(card);
-    const price = extractPrice(card); // returns null for best-offer items
+    const price = extractPrice(card);
     const date  = extractDate(card);
     if (!id || price === null || !date) {
       console.warn("[ebay-scatter] Skipping card:", { id: !!id, price, date });
@@ -114,26 +111,58 @@
     const s = document.createElement("style");
     s.textContent = `
       #ebay-scatter-panel {
-        position: fixed; right: 0; top: 0;
-        width: 320px; height: 100vh;
+        position: fixed; z-index: 2147483647;
         background: rgba(24,24,24,0.97); color: #eee;
-        z-index: 99999; display: flex; flex-direction: column;
-        box-shadow: -4px 0 20px rgba(0,0,0,0.6);
+        display: flex; flex-direction: column;
         font-family: system-ui, sans-serif; font-size: 13px;
+      }
+      #ebay-scatter-panel.dock-right {
+        right: 0; top: 0; width: 320px; height: 100vh;
+        box-shadow: -4px 0 20px rgba(0,0,0,0.6);
+      }
+      #ebay-scatter-panel.dock-left {
+        left: 0; top: 0; width: 320px; height: 100vh;
+        box-shadow: 4px 0 20px rgba(0,0,0,0.6);
+      }
+      #ebay-scatter-panel.dock-top {
+        top: 0; left: 0; width: 100vw; height: 280px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+      }
+      #ebay-scatter-panel.dock-bottom {
+        bottom: 0; left: 0; width: 100vw; height: 280px;
+        box-shadow: 0 -4px 20px rgba(0,0,0,0.6);
+      }
+      #ebay-scatter-panel.dragging {
+        opacity: 0.88; box-shadow: 0 8px 32px rgba(0,0,0,0.7);
       }
       #ebay-scatter-panel header {
         display: flex; align-items: center; justify-content: space-between;
         padding: 10px 12px; border-bottom: 1px solid #3a3a3a; flex-shrink: 0;
+        cursor: grab; user-select: none;
       }
+      #ebay-scatter-panel header.dragging { cursor: grabbing; }
       #ebay-scatter-panel header h2 { margin: 0; font-size: 14px; font-weight: 600; }
       #ebay-scatter-close {
         background: none; border: none; color: #888; font-size: 20px;
         cursor: pointer; padding: 0 2px; line-height: 1;
       }
       #ebay-scatter-close:hover { color: #fff; }
+      .ebay-scatter-body {
+        display: flex; flex: 1; min-height: 0; flex-direction: column;
+      }
+      #ebay-scatter-panel.dock-top .ebay-scatter-body,
+      #ebay-scatter-panel.dock-bottom .ebay-scatter-body {
+        flex-direction: row;
+      }
       #ebay-scatter-controls {
         display: flex; align-items: center; gap: 8px;
         padding: 7px 12px; border-bottom: 1px solid #3a3a3a; flex-shrink: 0;
+      }
+      #ebay-scatter-panel.dock-top #ebay-scatter-controls,
+      #ebay-scatter-panel.dock-bottom #ebay-scatter-controls {
+        flex-direction: column; align-items: flex-start;
+        width: 150px; flex-shrink: 0;
+        border-bottom: none; border-right: 1px solid #3a3a3a;
       }
       #ebay-scatter-clear {
         background: #444; border: none; color: #ddd;
@@ -142,7 +171,7 @@
       #ebay-scatter-clear:hover { background: #666; }
       #ebay-scatter-status { font-size: 12px; color: #888; }
       #ebay-scatter-chart-wrap {
-        flex: 1; min-height: 0; padding: 8px; position: relative;
+        flex: 1; min-height: 0; min-width: 0; padding: 8px; position: relative;
       }
       #ebay-scatter-placeholder {
         position: absolute; inset: 0;
@@ -150,13 +179,39 @@
         color: #555; font-size: 13px; text-align: center; padding: 20px;
       }
       #ebay-scatter-toggle {
-        position: fixed; right: 0; top: 50%; transform: translateY(-50%);
-        z-index: 99998; background: rgba(24,24,24,0.92); color: #eee;
-        border: none; border-radius: 6px 0 0 6px;
-        padding: 10px 6px; cursor: pointer; font-size: 18px;
-        box-shadow: -2px 0 10px rgba(0,0,0,0.4); display: none;
+        position: fixed; z-index: 2147483646;
+        background: rgba(24,24,24,0.92); color: #eee;
+        border: none; cursor: pointer; font-size: 18px; display: none;
       }
       #ebay-scatter-toggle:hover { background: #333; }
+      #ebay-scatter-toggle.dock-right {
+        right: 0; top: 50%; transform: translateY(-50%);
+        border-radius: 6px 0 0 6px; padding: 10px 6px;
+        box-shadow: -2px 0 10px rgba(0,0,0,0.4);
+      }
+      #ebay-scatter-toggle.dock-left {
+        left: 0; top: 50%; transform: translateY(-50%);
+        border-radius: 0 6px 6px 0; padding: 10px 6px;
+        box-shadow: 2px 0 10px rgba(0,0,0,0.4);
+      }
+      #ebay-scatter-toggle.dock-top {
+        top: 0; left: 50%; transform: translateX(-50%);
+        border-radius: 0 0 6px 6px; padding: 4px 14px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+      }
+      #ebay-scatter-toggle.dock-bottom {
+        bottom: 0; left: 50%; transform: translateX(-50%);
+        border-radius: 6px 6px 0 0; padding: 4px 14px;
+        box-shadow: 0 -2px 10px rgba(0,0,0,0.4);
+      }
+      #ebay-scatter-snap-preview {
+        position: fixed; z-index: 2147483645; pointer-events: none; display: none;
+        background: rgba(99,179,237,0.12); border: 2px solid rgba(99,179,237,0.55);
+      }
+      #ebay-scatter-snap-preview.snap-right  { right: 0; top: 0; width: 320px; height: 100vh; }
+      #ebay-scatter-snap-preview.snap-left   { left: 0; top: 0; width: 320px; height: 100vh; }
+      #ebay-scatter-snap-preview.snap-top    { top: 0; left: 0; width: 100vw; height: 280px; }
+      #ebay-scatter-snap-preview.snap-bottom { bottom: 0; left: 0; width: 100vw; height: 280px; }
       .ebay-scatter-cb {
         display: inline-flex; align-items: center; gap: 4px;
         margin-top: 6px; cursor: pointer; user-select: none;
@@ -194,6 +249,29 @@
     document.head.appendChild(s);
   }
 
+  // ── Dock helpers ──────────────────────────────────────────────────────────────
+
+  function nearestEdge(mouseX, mouseY) {
+    const W = window.innerWidth, H = window.innerHeight;
+    const dists = { left: mouseX, right: W - mouseX, top: mouseY, bottom: H - mouseY };
+    return Object.entries(dists).reduce((a, b) => a[1] < b[1] ? a : b)[0];
+  }
+
+  function setDockSide(side) {
+    dockSide = side;
+    localStorage.setItem(DOCK_KEY, side);
+    const panel  = document.getElementById("ebay-scatter-panel");
+    const toggle = document.getElementById("ebay-scatter-toggle");
+    ["dock-right", "dock-left", "dock-top", "dock-bottom"].forEach(c => {
+      panel.classList.remove(c);
+      toggle.classList.remove(c);
+    });
+    ["left", "top", "right", "bottom", "width", "height"].forEach(p => panel.style[p] = "");
+    panel.classList.add("dock-" + side);
+    toggle.classList.add("dock-" + side);
+    if (chartInstance) chartInstance.resize();
+  }
+
   // ── Panel ────────────────────────────────────────────────────────────────────
 
   function buildPanel() {
@@ -204,13 +282,15 @@
         <h2>Price History</h2>
         <button id="ebay-scatter-close" title="Close">&times;</button>
       </header>
-      <div id="ebay-scatter-controls">
-        <button id="ebay-scatter-clear">Clear All</button>
-        <span id="ebay-scatter-status"></span>
-      </div>
-      <div id="ebay-scatter-chart-wrap">
-        <div id="ebay-scatter-placeholder">Check items below to plot prices</div>
-        <canvas id="ebay-scatter-canvas"></canvas>
+      <div class="ebay-scatter-body">
+        <div id="ebay-scatter-controls">
+          <button id="ebay-scatter-clear">Clear All</button>
+          <span id="ebay-scatter-status"></span>
+        </div>
+        <div id="ebay-scatter-chart-wrap">
+          <div id="ebay-scatter-placeholder">Check items below to plot prices</div>
+          <canvas id="ebay-scatter-canvas"></canvas>
+        </div>
       </div>
     `;
     document.body.appendChild(panel);
@@ -221,6 +301,10 @@
     toggle.textContent = "📈";
     document.body.appendChild(toggle);
 
+    const preview = document.createElement("div");
+    preview.id = "ebay-scatter-snap-preview";
+    document.body.appendChild(preview);
+
     document.getElementById("ebay-scatter-close").addEventListener("click", () => {
       panel.style.display = "none";
       toggle.style.display = "block";
@@ -230,6 +314,54 @@
       toggle.style.display = "none";
     });
     document.getElementById("ebay-scatter-clear").addEventListener("click", clearAll);
+
+    // ── Drag to dock ──────────────────────────────────────────────────────────
+    const header = panel.querySelector("header");
+    let isDragging = false;
+    let dragOffsetX = 0, dragOffsetY = 0;
+
+    header.addEventListener("mousedown", e => {
+      if (e.target.id === "ebay-scatter-close") return;
+      isDragging = true;
+      const rect = panel.getBoundingClientRect();
+      dragOffsetX = e.clientX - rect.left;
+      dragOffsetY = e.clientY - rect.top;
+      // Pin panel to its current pixel position before removing dock class
+      panel.style.left   = rect.left + "px";
+      panel.style.top    = rect.top  + "px";
+      panel.style.right  = "auto";
+      panel.style.bottom = "auto";
+      panel.style.width  = rect.width  + "px";
+      panel.style.height = rect.height + "px";
+      ["dock-right", "dock-left", "dock-top", "dock-bottom"].forEach(c => panel.classList.remove(c));
+      header.classList.add("dragging");
+      panel.classList.add("dragging");
+      e.preventDefault();
+    });
+
+    document.addEventListener("mousemove", e => {
+      if (!isDragging) return;
+      panel.style.left = (e.clientX - dragOffsetX) + "px";
+      panel.style.top  = (e.clientY - dragOffsetY) + "px";
+      const edge = nearestEdge(e.clientX, e.clientY);
+      const dist = { left: e.clientX, right: window.innerWidth - e.clientX,
+                     top: e.clientY,  bottom: window.innerHeight - e.clientY }[edge];
+      if (dist < SNAP_THRESHOLD) {
+        preview.className = "snap-" + edge;
+        preview.style.display = "block";
+      } else {
+        preview.style.display = "none";
+      }
+    });
+
+    document.addEventListener("mouseup", e => {
+      if (!isDragging) return;
+      isDragging = false;
+      header.classList.remove("dragging");
+      panel.classList.remove("dragging");
+      preview.style.display = "none";
+      setDockSide(nearestEdge(e.clientX, e.clientY));
+    });
   }
 
   // ── Chart ────────────────────────────────────────────────────────────────────
@@ -318,12 +450,9 @@
 
   function injectCheckbox(card) {
     if (card.dataset.scatterInjected) return;
-    card.dataset.scatterInjected = "1"; // mark early to prevent re-entry from observer
+    card.dataset.scatterInjected = "1";
     const id = extractItemId(card);
     if (!id || !card.querySelector("a[href*='/itm/']")) return;
-    // Only inject a checkbox if the item's data can actually be extracted.
-    // This keeps syncPlotAll's "all" count accurate — unextractable items
-    // (no date, no price, best-offer) are never counted.
     if (!extractItemData(card)) return;
 
     const label = document.createElement("label");
@@ -432,6 +561,7 @@
 
   injectStyles();
   buildPanel();
+  setDockSide(dockSide);
 
   const container = document.querySelector(RESULTS_SEL);
   if (!container) {
