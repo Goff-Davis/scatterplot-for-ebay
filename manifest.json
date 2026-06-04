@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "eBay Scatterplot",
+  "version": "1.0",
+
+  "description": "Creates a scatterplot of times and prices of selected eBay listings.",
+
+  "icons": {
+    "48": "icons/scatterplot-48.png",
+    "96": "icons/scatterplot-96.png"
+  },
+
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "borderify@mozilla.org",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["*://*.ebay.com/*"],
+      "js": ["node_modules/chart.js/dist/chart.umd.min.js", "scatterplot.js"]
+    }
+  ]
+}

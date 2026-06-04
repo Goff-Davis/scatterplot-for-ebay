@@ -1,0 +1,8 @@
+{
+  "name": "ebay-scatterplot",
+  "version": "1.0.0",
+  "private": true,
+"dependencies": {
+    "chart.js": "^4.5.1"
+  }
+}
