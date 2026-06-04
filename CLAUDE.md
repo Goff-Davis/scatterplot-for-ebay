@@ -16,7 +16,7 @@ The extension's own source (`src/*.js`) is loaded as-is — no bundler or transp
 
 Load the extension in Firefox for development:
 1. `about:debugging#/runtime/this-firefox` → Load Temporary Add-on → select `manifest.json`
-2. Navigate to an eBay sold/completed search (both `LH_Complete=1` and `LH_Sold=1` must be in the URL)
+2. Navigate to an eBay sold/completed search (the URL must contain `LH_Complete=1` or `LH_Sold=1`)
 3. After editing any `src/*.js` file, click "Reload" on the extension card
 
 To update Chart.js: `npm update chart.js` then `npm run vendor` (re-copies into `vendor/`).
@@ -51,7 +51,7 @@ Key conventions:
 
 ## Architecture
 
-Content scripts in `src/` are loaded sequentially by the manifest. All files share the same content script sandbox scope — no IIFE, no ES modules. Top-level `const`/`let`/`function` declarations in one file are accessible to all subsequently loaded files. The content scripts are registered only for eBay search pages (`*://*.ebay.com/sch/*` in the manifest), and `src/init.js` further guards on both `LH_Complete=1` and `LH_Sold=1` being present in the URL (it checks the values, not just the keys). Chart.js is loaded first via the manifest (`vendor/chart.js/chart.umd.min.js`) so `window.Chart` is available synchronously — no CDN injection (eBay's CSP blocks it).
+Content scripts in `src/` are loaded sequentially by the manifest. All files share the same content script sandbox scope — no IIFE, no ES modules. Top-level `const`/`let`/`function` declarations in one file are accessible to all subsequently loaded files. The content scripts are registered only for eBay search pages (`*://*.ebay.com/sch/*` in the manifest), and `src/init.js` further guards on `LH_Complete=1` or `LH_Sold=1` being present in the URL (checking the values, not just the keys). Chart.js is loaded first via the manifest (`vendor/chart.js/chart.umd.min.js`) so `window.Chart` is available synchronously — no CDN injection (eBay's CSP blocks it).
 
 **Source files (load order matches manifest):**
 - `src/constants.js` — five `const` values: `RESULTS_SEL`, `STORAGE_KEY`, `MAX_ITEMS`, `DOCK_KEY`, `SNAP_THRESHOLD`

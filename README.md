@@ -30,7 +30,7 @@ The extension will remain active until Firefox is closed. Repeat step 4 after re
 ## Usage
 
 1. Go to an eBay search and filter to **Sold listings** (or **Completed listings**)
-   The URL must contain both `LH_Complete=1` and `LH_Sold=1`
+   The URL must contain `LH_Complete=1` or `LH_Sold=1`
 2. The price history panel appears on the right side of the page
 3. Check the **Plot** box on any listing to add it to the chart
 4. Use **Plot all** to select everything on the page at once

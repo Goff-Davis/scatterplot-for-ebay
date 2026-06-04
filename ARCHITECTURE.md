@@ -6,7 +6,7 @@ This is a Firefox browser extension that adds a price history panel to eBay sold
 
 ## How the extension loads
 
-The extension is declared as a **content script** in `manifest.json`, registered only for eBay search-result pages (URLs under `/sch/` on `ebay.com`). Even there it checks the URL before doing anything — it only activates when both `LH_Complete=1` and `LH_Sold=1` are set to `1` in the query string (eBay's parameters for "sold/completed" searches).
+The extension is declared as a **content script** in `manifest.json`, registered only for eBay search-result pages (URLs under `/sch/` on `ebay.com`). Even there it checks the URL before doing anything — it only activates when `LH_Complete=1` or `LH_Sold=1` is set to `1` in the query string (eBay's parameters for "sold/completed" searches).
 
 The extension's own code has no build step — Firefox loads the `src/` files directly, in the order listed in `manifest.json`, with no bundler or transpiler. The one third-party library it ships, Chart.js, is *vendored* (copied into `vendor/`) so it travels with the extension; see *Dependencies and vendoring* below. Packaging the whole thing into a distributable `.zip` is done with `web-ext` (`npm run build`).
 
