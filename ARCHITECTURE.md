@@ -6,7 +6,7 @@ This is a Firefox browser extension that adds a price history panel to eBay sold
 
 ## How the extension loads
 
-The extension is declared as a **content script** in `manifest.json`. Firefox injects it into any `ebay.com` page. The script checks the URL before doing anything — it only activates when both `LH_Complete=1` and `LH_Sold=1` are present in the query string (eBay's parameters for "sold/completed" searches).
+The extension is declared as a **content script** in `manifest.json`, registered only for eBay search-result pages (URLs under `/sch/` on `ebay.com`). Even there it checks the URL before doing anything — it only activates when both `LH_Complete=1` and `LH_Sold=1` are set to `1` in the query string (eBay's parameters for "sold/completed" searches).
 
 The extension's own code has no build step — Firefox loads the `src/` files directly, in the order listed in `manifest.json`, with no bundler or transpiler. The one third-party library it ships, Chart.js, is *vendored* (copied into `vendor/`) so it travels with the extension; see *Dependencies and vendoring* below. Packaging the whole thing into a distributable `.zip` is done with `web-ext` (`npm run build`).
 
@@ -77,7 +77,7 @@ Rather than relying on eBay's CSS class names (which change frequently), the ext
 - **Date** — finds a leaf element whose text starts with "Sold " and parses the date from it, stored as `YYYY-MM-DD` formatted from local date components (so the stored day matches what eBay displayed, regardless of the user's timezone)
 - **Item ID** — reads `data-listingid` on the card element, with a fallback to parsing the `/itm/<id>` URL
 
-Items that fail any of these checks (missing price, missing date, best-offer) get no checkbox injected. This keeps the "Plot all" checkbox state accurate.
+Items that fail any of these checks (missing price, missing date, best-offer) get no checkbox injected, which keeps the "Plot all" checkbox state accurate. Obvious non-listings (ad/promo tiles) are marked and skipped permanently; a real listing card that simply hasn't finished rendering is left unmarked and retried on the next observer pass.
 
 ## Checkboxes and "Plot all"
 
@@ -99,10 +99,9 @@ Chart.js renders a scatter chart with sale dates on the x-axis and total price (
 
 ## Handling eBay's dynamic page updates
 
-eBay's search page updates the DOM without full page reloads in two ways:
+As you scroll, eBay appends new listing cards to `ul.srp-results` without a full page reload (infinite scroll). A single `MutationObserver` on that element watches for child-list changes; on each one it re-scans the direct `<li>` children that haven't been processed yet and injects checkboxes. The same pass retries any listing card whose price or date rendered late.
 
-1. **Infinite scroll** — new listing cards are appended to `ul.srp-results`. A `MutationObserver` on that element detects new `<li>` children and injects checkboxes into them.
-2. **Pagination** — eBay sometimes replaces the entire `ul.srp-results` element. A second `MutationObserver` on the parent detects this and reconnects the first observer to the new list.
+Filtering, sorting, and pagination on the sold-search page trigger full page navigations rather than in-place DOM swaps, so the extension simply re-initializes. This has been verified for pagination specifically: clicking to the next page reloads the page, and because selections live in `localStorage`, everything already plotted survives the reload and stays on the chart while items from the newly loaded page can be added to the same plot — so you can page through results and accumulate points across multiple pages. No extra observer is needed for in-place list replacement (which eBay was confirmed never to do here).
 
 ## Dependencies and vendoring
 

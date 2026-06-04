@@ -124,16 +124,13 @@ function extractItemData(card) {
   const date = extractDate(card);
 
   if (!id || price === null || !date) {
-    console.warn('[ebay-scatter] Skipping card:', { id: !!id, price, date });
     return null;
   }
 
-  const a = card.querySelector("a[href*='/itm/']");
   return {
     id,
     title: extractTitle(card) || 'Unknown item',
     date,
     price,
-    url: a ? a.href : '',
   };
 }

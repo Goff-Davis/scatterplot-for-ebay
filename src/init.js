@@ -1,6 +1,6 @@
 const params = new URLSearchParams(window.location.search);
 
-if (params.has('LH_Complete') && params.has('LH_Sold')) {
+if (params.get('LH_Complete') === '1' && params.get('LH_Sold') === '1') {
   injectStyles();
   buildPanel();
   setDockSide(dockSide);
@@ -18,30 +18,16 @@ if (params.has('LH_Complete') && params.has('LH_Sold')) {
     renderChart(loadItems());
     syncPlotAll();
 
-    // Watch for new cards (infinite scroll / pagination)
-    const listObserver = new MutationObserver((mutations) => {
-      for (const mut of mutations) {
-        for (const node of mut.addedNodes) {
-          if (node.nodeType === 1 && node.tagName === 'LI') {
-            injectCheckbox(node);
-          }
-        }
-      }
+    // Infinite scroll appends new <li> cards to the same list. On each change,
+    // re-scan direct children that haven't been processed yet — this picks up
+    // new cards and retries listing cards whose price/date rendered late.
+    // (Filter, sort, and pagination trigger full page navigations, which
+    // re-initialize the extension, so no in-place-swap observer is needed.)
+    const listObserver = new MutationObserver(() => {
+      container
+        .querySelectorAll(':scope > li:not([data-scatter-injected])')
+        .forEach((card) => injectCheckbox(card));
     });
     listObserver.observe(container, { childList: true });
-
-    // Watch parent in case eBay replaces the whole results list on pagination
-    if (container.parentElement) {
-      new MutationObserver(() => {
-        const fresh = document.querySelector(RESULTS_SEL);
-        if (fresh && fresh !== container) {
-          listObserver.disconnect();
-          fresh
-            .querySelectorAll(':scope > li')
-            .forEach((card) => injectCheckbox(card));
-          listObserver.observe(fresh, { childList: true });
-        }
-      }).observe(container.parentElement, { childList: true });
-    }
   }
 }

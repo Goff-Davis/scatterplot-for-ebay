@@ -111,7 +111,6 @@ test('extractItemData returns a full record for a valid card', () => {
   assert.equal(d.date, '2026-04-24');
   assert.equal(d.price, 69.99);
   assert.ok(d.title.length > 0);
-  assert.match(d.url, /\/itm\//);
 });
 
 test('extractItemData returns null for best-offer cards', () => {

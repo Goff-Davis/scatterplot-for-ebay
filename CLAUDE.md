@@ -49,7 +49,7 @@ Key conventions:
 
 ## Architecture
 
-Content scripts in `src/` are loaded sequentially by the manifest. All files share the same content script sandbox scope — no IIFE, no ES modules. Top-level `const`/`let`/`function` declarations in one file are accessible to all subsequently loaded files. The extension only activates when both `LH_Complete=1` and `LH_Sold=1` are in the URL (guard in `src/init.js`). Chart.js is loaded first via the manifest (`vendor/chart.js/chart.umd.min.js`) so `window.Chart` is available synchronously — no CDN injection (eBay's CSP blocks it).
+Content scripts in `src/` are loaded sequentially by the manifest. All files share the same content script sandbox scope — no IIFE, no ES modules. Top-level `const`/`let`/`function` declarations in one file are accessible to all subsequently loaded files. The content scripts are registered only for eBay search pages (`*://*.ebay.com/sch/*` in the manifest), and `src/init.js` further guards on both `LH_Complete=1` and `LH_Sold=1` being present in the URL (it checks the values, not just the keys). Chart.js is loaded first via the manifest (`vendor/chart.js/chart.umd.min.js`) so `window.Chart` is available synchronously — no CDN injection (eBay's CSP blocks it).
 
 **Source files (load order matches manifest):**
 - `src/constants.js` — five `const` values: `RESULTS_SEL`, `STORAGE_KEY`, `MAX_ITEMS`, `DOCK_KEY`, `SNAP_THRESHOLD`
@@ -85,7 +85,7 @@ Extraction is content-based (resilient to eBay class renames):
 - **Price:** leaf element whose full text matches `$X.XX` — checks parent chain for `line-through` (best-offer items are skipped); shipping added if a nearby leaf contains "delivery"/"shipping" and a `$` amount
 - **Title:** `[role="heading"][aria-level="3"]` with `.clipped`/`aria-hidden` nodes stripped; falls back to card `aria-label`
 
-`extractItemData` returns `null` for best-offer items, items missing a date, or items with unparseable prices. `injectCheckbox` only injects a checkbox if `extractItemData` succeeds, which keeps `syncPlotAll`'s total count accurate.
+`extractItemData` returns `null` for best-offer items, items missing a date, or items with unparseable prices. `injectCheckbox` only injects a checkbox if `extractItemData` succeeds, which keeps `syncPlotAll`'s total count accurate. Non-listing tiles (ads/promos) are marked `data-scatter-injected="skip"` and never re-checked; a listing card that fails extraction is left *unmarked* so a later observer pass retries it (handles eBay's lazy rendering). Successfully extracted data is cached in a `WeakMap` (`cardData`) so the checkbox handler and "Plot all" don't re-extract.
 
 ## Checkboxes & "Plot all"
 
@@ -97,8 +97,6 @@ Extraction is content-based (resilient to eBay class renames):
 
 Chart.js scatter type with a linear x-axis (millisecond timestamps). Custom `ticks.callback` formats x-axis labels as `YYYY-MM-DD` — no date adapter needed. Chart updates in-place (`chartInstance.data.datasets[0].data = data; chartInstance.update()`) rather than destroying and recreating. `chartInstance` is declared in `src/chart.js` and referenced directly by `src/dock.js` and `src/panel.js`.
 
-## MutationObservers
+## MutationObserver
 
-Two observers in `src/init.js`:
-1. On `ul.srp-results` — watches for new `<li>` children (infinite scroll), calls `injectCheckbox` on each
-2. On the parent of `ul.srp-results` — detects when eBay replaces the entire list on pagination, reconnects the first observer to the new container
+One observer in `src/init.js`, on `ul.srp-results` (`childList`). On each mutation it re-scans the direct `<li>` children that aren't yet marked (`:scope > li:not([data-scatter-injected])`) and runs `injectCheckbox` on them. This covers infinite scroll (new cards) and retries listing cards whose price/date hadn't rendered on an earlier pass. Filter, sort, and pagination on the sold-search page trigger full page navigations, so the extension simply re-initializes. Pagination was verified to work this way: the next page is a full reload, and because selections persist in `localStorage`, the existing plot survives and new-page items can be added to it (plotting accumulates across pages). There is no separate observer for in-place list replacement — eBay was confirmed never to swap `ul.srp-results` in place.

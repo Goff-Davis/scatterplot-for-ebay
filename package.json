@@ -2,6 +2,7 @@
   "name": "ebay-scatterplot",
   "version": "1.0.0",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "vendor": "node scripts/vendor.mjs",
     "postinstall": "node scripts/vendor.mjs",

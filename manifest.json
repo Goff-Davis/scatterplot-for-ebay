@@ -21,7 +21,7 @@
 
   "content_scripts": [
     {
-      "matches": ["*://*.ebay.com/*"],
+      "matches": ["*://*.ebay.com/sch/*"],
       "js": [
         "vendor/chart.js/chart.umd.min.js",
         "src/constants.js",

@@ -34,6 +34,8 @@ The extension will remain active until Firefox is closed. Repeat step 4 after re
 4. Use **Plot all** to select everything on the page at once
 5. Hover over a point on the chart to see the item title, date, and price
 
+**Across pages:** Your selections are saved, so you can move to the next page of results and keep adding listings — the chart accumulates points from every page you visit.
+
 **Moving the panel:** Drag the "Price History" header to any edge of the screen. Release near an edge to snap it there. Close the panel with the × button — a small tab appears to reopen it. The tab can also be dragged to a different edge.
 
 **Resizing:** Hover over the panel's inner edge until the cursor changes, then drag to resize.
