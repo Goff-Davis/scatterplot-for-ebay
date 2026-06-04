@@ -212,7 +212,9 @@ function buildPanel() {
       preview.style.display = 'none';
       // Only re-dock on an actual drag; a plain click restores the current side
       // (clearing the inline pixel styles the mousedown pinned), so it's a no-op.
-      setDockSide(panelDragMoved ? nearestEdge(e.clientX, e.clientY) : dockSide);
+      setDockSide(
+        panelDragMoved ? nearestEdge(e.clientX, e.clientY) : dockSide,
+      );
     }
   });
 }
