@@ -284,6 +284,7 @@
       toggle.classList.remove(c);
     });
     ["left", "top", "right", "bottom", "width", "height"].forEach(p => panel.style[p] = "");
+    ["left", "top", "right", "bottom", "transform"].forEach(p => toggle.style[p] = "");
     panel.classList.add("dock-" + side);
     toggle.classList.add("dock-" + side);
     if (chartInstance) chartInstance.resize();
@@ -328,6 +329,7 @@
       toggle.style.display = "block";
     });
     toggle.addEventListener("click", () => {
+      if (toggleDragMoved) { toggleDragMoved = false; return; }
       panel.style.display = "flex";
       toggle.style.display = "none";
     });
@@ -370,6 +372,52 @@
       if (!isResizing) return;
       isResizing = false;
       resizeHandle.classList.remove("resizing");
+    });
+
+    // ── Toggle drag ───────────────────────────────────────────────────────────
+    let isToggleDragging = false;
+    let toggleDragMoved  = false;
+    let toggleDragOffX   = 0, toggleDragOffY = 0;
+
+    toggle.addEventListener("mousedown", e => {
+      isToggleDragging = true;
+      toggleDragMoved  = false;
+      const rect = toggle.getBoundingClientRect();
+      toggleDragOffX = e.clientX - rect.left;
+      toggleDragOffY = e.clientY - rect.top;
+      toggle.style.left      = rect.left + "px";
+      toggle.style.top       = rect.top  + "px";
+      toggle.style.right     = "auto";
+      toggle.style.bottom    = "auto";
+      toggle.style.transform = "none";
+      ["dock-right", "dock-left", "dock-top", "dock-bottom"].forEach(c => toggle.classList.remove(c));
+      e.preventDefault();
+    });
+
+    document.addEventListener("mousemove", e => {
+      if (!isToggleDragging) return;
+      toggleDragMoved = true;
+      toggle.style.left = (e.clientX - toggleDragOffX) + "px";
+      toggle.style.top  = (e.clientY - toggleDragOffY) + "px";
+      const edge = nearestEdge(e.clientX, e.clientY);
+      const dist = { left: e.clientX, right: window.innerWidth - e.clientX,
+                     top: e.clientY,  bottom: window.innerHeight - e.clientY }[edge];
+      if (dist < SNAP_THRESHOLD) {
+        preview.className = "snap-" + edge;
+        preview.style.display = "block";
+      } else {
+        preview.style.display = "none";
+      }
+    });
+
+    document.addEventListener("mouseup", e => {
+      if (!isToggleDragging) return;
+      isToggleDragging = false;
+      preview.style.display = "none";
+      if (toggleDragMoved) {
+        setDockSide(nearestEdge(e.clientX, e.clientY));
+        // toggle.style.display stays "block" — panel remains closed
+      }
     });
 
     // ── Drag to dock ──────────────────────────────────────────────────────────
