@@ -32,6 +32,8 @@ function injectStyles() {
       cursor: grab; user-select: none;
     }
     #ebay-scatter-panel header.dragging { cursor: grabbing; }
+    #ebay-scatter-panel.dock-top header,
+    #ebay-scatter-panel.dock-bottom header { padding-right: 28px; }
     #ebay-scatter-panel header h2 { margin: 0; font-size: 14px; font-weight: 600; }
     #ebay-scatter-close {
       background: none; border: none; color: #888; font-size: 20px;
