@@ -29,7 +29,7 @@ The extension will remain active until Firefox is closed. Repeat step 4 after re
 
 ## Usage
 
-1. Go to an eBay search and filter to **Sold listings** (or **Completed listings**)  
+1. Go to an eBay search and filter to **Sold listings** (or **Completed listings**)
    The URL must contain both `LH_Complete=1` and `LH_Sold=1`
 2. The price history panel appears on the right side of the page
 3. Check the **Plot** box on any listing to add it to the chart
@@ -51,6 +51,6 @@ No build step is needed to develop. After editing any file in `src/`:
 
 Run the unit tests with `npm test` (covers the data-extraction logic in `src/extract.js`).
 
-To package the extension for distribution, run `npm run lint` and `npm run build`; see [SUBMITTING.md](SUBMITTING.md) for the full Firefox Add-ons (AMO) submission flow.
+To package the extension for distribution, run `npm run lint` and `npm run build`.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for a full explanation of how the extension works.
