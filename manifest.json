@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "eBay Scatterplot",
+  "name": "Scatterplot for eBay",
   "version": "1.0.0",
 
   "description": "Creates a scatterplot of times and prices of selected eBay listings.",
@@ -12,7 +12,7 @@
 
   "browser_specific_settings": {
     "gecko": {
-      "id": "ebay-scatterplot@davisgoff.com",
+      "id": "scatterplot-for-ebay@davisgoff.com",
       "data_collection_permissions": {
         "required": ["none"]
       }
