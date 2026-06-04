@@ -4,24 +4,36 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Firefox browser extension (Manifest V3) that injects a scatterplot panel into eBay sold/completed search results pages to visualize listing prices over time. Full feature spec is in `prompt.md`.
+Firefox browser extension (Manifest V3) that injects a scatterplot panel into eBay sold/completed search results pages to visualize listing prices over time.
 
 ## Setup & development
 
 ```bash
-npm install          # install Chart.js (required before loading extension)
+npm install          # installs Chart.js + web-ext; postinstall vendors Chart.js into vendor/
 ```
 
-No build step. Load the extension in Firefox:
+The extension's own source (`src/*.js`) is loaded as-is — no bundler or transpiler. Chart.js is the one third-party file the extension ships; `scripts/vendor.mjs` copies it (and its license) from `node_modules/` into `vendor/chart.js/` so the packaged XPI never references `node_modules/`. The vendor step runs automatically on `npm install` (postinstall) and before `npm run build`.
+
+Load the extension in Firefox for development:
 1. `about:debugging#/runtime/this-firefox` → Load Temporary Add-on → select `manifest.json`
 2. Navigate to an eBay sold/completed search (both `LH_Complete=1` and `LH_Sold=1` must be in the URL)
 3. After editing any `src/*.js` file, click "Reload" on the extension card
 
-To update Chart.js: `npm update chart.js` then reload the extension.
+To update Chart.js: `npm update chart.js` then `npm run vendor` (re-copies into `vendor/`).
+
+Source is formatted with 2-space indent, single quotes, semicolons, and braces on all blocks — match the existing style when editing.
+
+## Build & packaging
+
+- `npm run lint` — `web-ext lint`, must pass with 0 errors before submitting
+- `npm run build` — vendors Chart.js, then `web-ext build` → `web-ext-artifacts/ebay_scatterplot-<version>.zip`
+- `npm run sign` — submits to AMO as a listed add-on (needs `WEB_EXT_API_KEY` / `WEB_EXT_API_SECRET`)
+
+Packaging ignores are under `webExt.ignoreFiles` in `package.json` — `node_modules/`, `scripts/`, and the docs are excluded, but `vendor/` IS shipped. Bump `version` in both `manifest.json` and `package.json` per release. Full AMO submission flow and reviewer notes are in `SUBMITTING.md`.
 
 ## Architecture
 
-Content scripts in `src/` are loaded sequentially by the manifest. All files share the same content script sandbox scope — no IIFE, no ES modules. Top-level `const`/`let`/`function` declarations in one file are accessible to all subsequently loaded files. The extension only activates when both `LH_Complete=1` and `LH_Sold=1` are in the URL (guard in `src/init.js`). Chart.js is loaded first via the manifest (`node_modules/chart.js/dist/chart.umd.min.js`) so `window.Chart` is available synchronously — no CDN injection (eBay's CSP blocks it).
+Content scripts in `src/` are loaded sequentially by the manifest. All files share the same content script sandbox scope — no IIFE, no ES modules. Top-level `const`/`let`/`function` declarations in one file are accessible to all subsequently loaded files. The extension only activates when both `LH_Complete=1` and `LH_Sold=1` are in the URL (guard in `src/init.js`). Chart.js is loaded first via the manifest (`vendor/chart.js/chart.umd.min.js`) so `window.Chart` is available synchronously — no CDN injection (eBay's CSP blocks it).
 
 **Source files (load order matches manifest):**
 - `src/constants.js` — five `const` values: `RESULTS_SEL`, `STORAGE_KEY`, `MAX_ITEMS`, `DOCK_KEY`, `SNAP_THRESHOLD`
