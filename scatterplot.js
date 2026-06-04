@@ -204,6 +204,23 @@
         border-radius: 6px 6px 0 0; padding: 4px 14px;
         box-shadow: 0 -2px 10px rgba(0,0,0,0.4);
       }
+      #ebay-scatter-resize {
+        position: absolute; z-index: 10;
+      }
+      .dock-right #ebay-scatter-resize {
+        left: 0; top: 0; width: 6px; height: 100%; cursor: col-resize;
+      }
+      .dock-left #ebay-scatter-resize {
+        right: 0; top: 0; width: 6px; height: 100%; cursor: col-resize;
+      }
+      .dock-top #ebay-scatter-resize {
+        bottom: 0; left: 0; height: 6px; width: 100%; cursor: row-resize;
+      }
+      .dock-bottom #ebay-scatter-resize {
+        top: 0; left: 0; height: 6px; width: 100%; cursor: row-resize;
+      }
+      #ebay-scatter-resize:hover { background: rgba(99,179,237,0.18); }
+      #ebay-scatter-resize.resizing { background: rgba(99,179,237,0.28); }
       #ebay-scatter-snap-preview {
         position: fixed; z-index: 2147483645; pointer-events: none; display: none;
         background: rgba(99,179,237,0.12); border: 2px solid rgba(99,179,237,0.55);
@@ -292,6 +309,7 @@
           <canvas id="ebay-scatter-canvas"></canvas>
         </div>
       </div>
+      <div id="ebay-scatter-resize"></div>
     `;
     document.body.appendChild(panel);
 
@@ -314,6 +332,45 @@
       toggle.style.display = "none";
     });
     document.getElementById("ebay-scatter-clear").addEventListener("click", clearAll);
+
+    // ── Resize ────────────────────────────────────────────────────────────────
+    const resizeHandle = document.getElementById("ebay-scatter-resize");
+    let isResizing = false;
+    let resizeStartPos = 0;
+    let resizeStartDim = 0;
+
+    resizeHandle.addEventListener("mousedown", e => {
+      isResizing = true;
+      const rect = panel.getBoundingClientRect();
+      const horiz = dockSide === "left" || dockSide === "right";
+      resizeStartPos = horiz ? e.clientX : e.clientY;
+      resizeStartDim = horiz ? rect.width : rect.height;
+      resizeHandle.classList.add("resizing");
+      e.preventDefault();
+      e.stopPropagation();
+    });
+
+    document.addEventListener("mousemove", e => {
+      if (!isResizing) return;
+      let newDim;
+      if (dockSide === "right")  newDim = resizeStartDim + (resizeStartPos - e.clientX);
+      if (dockSide === "left")   newDim = resizeStartDim + (e.clientX - resizeStartPos);
+      if (dockSide === "top")    newDim = resizeStartDim + (e.clientY - resizeStartPos);
+      if (dockSide === "bottom") newDim = resizeStartDim + (resizeStartPos - e.clientY);
+      const horiz = dockSide === "left" || dockSide === "right";
+      newDim = Math.max(
+        horiz ? 200 : 120,
+        Math.min(horiz ? window.innerWidth * 0.7 : window.innerHeight * 0.7, newDim)
+      );
+      panel.style[horiz ? "width" : "height"] = newDim + "px";
+      if (chartInstance) chartInstance.resize();
+    });
+
+    document.addEventListener("mouseup", () => {
+      if (!isResizing) return;
+      isResizing = false;
+      resizeHandle.classList.remove("resizing");
+    });
 
     // ── Drag to dock ──────────────────────────────────────────────────────────
     const header = panel.querySelector("header");
