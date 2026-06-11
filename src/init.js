@@ -1,6 +1,6 @@
 const params = new URLSearchParams(window.location.search);
 
-if (params.get('LH_Complete') === '1' || params.get('LH_Sold') === '1') {
+if (params.get('LH_Sold') === '1') {
   injectStyles();
   buildPanel();
   setDockSide(dockSide);
