@@ -2,11 +2,11 @@
 
 ## What it does
 
-This is a Firefox browser extension that adds a price history panel to eBay sold/completed search results pages. You check a box on any listing to add it to the chart, which plots sale price over time as a scatterplot.
+This is a Firefox browser extension that adds a price history panel to eBay search pages. You check a box on any listing to add it to the chart. Sold listings are plotted by sale date; active (unsold) listings appear in a separate price-distribution strip chart.
 
 ## How the extension loads
 
-The extension is declared as a **content script** in `manifest.json`, registered only for eBay search-result pages (URLs under `/sch/` on `ebay.com`). Even there it checks the URL before doing anything — it only activates when `LH_Sold=1` is set to `1` in the query string (eBay's parameters for "sold/completed" searches).
+The extension is declared as a **content script** in `manifest.json`, registered only for eBay search-result pages (URLs under `/sch/` on `ebay.com`). It runs on all matching pages — there is no URL guard. The panel starts minimized by default (only the 📈 toggle tab is visible) and opens on first interaction. Once opened, that state is stored in `localStorage` and restored on the next page load if saved data exists; closing the panel with × clears the flag.
 
 The extension's own code has no build step — Firefox loads the `src/` files directly, in the order listed in `manifest.json`, with no bundler or transpiler. The one third-party library it ships, Chart.js, is *vendored* (copied into `vendor/`) so it travels with the extension; see *Dependencies and vendoring* below. Packaging the whole thing into a distributable `.zip` is done with `web-ext` (`npm run build`).
 
@@ -28,7 +28,7 @@ src/
   dock.js              Track and change which edge the panel is docked to
   checkboxes.js        Per-item checkboxes, "Plot all" control
   panel.js             Build the panel DOM and handle all mouse interaction
-  init.js              Entry point — URL guard, startup sequence, scroll/pagination observers
+  init.js              Entry point — startup sequence, panel state restore, scroll observers
 test/
   extract.test.mjs     Unit tests for the extraction logic
   helpers/load.mjs     Loads src/extract.js into a jsdom context for testing
@@ -46,7 +46,7 @@ The panel (`#ebay-scatter-panel`) is a fixed-position overlay injected into the 
 
 1. **Header** — "Price History" title and a close button. The header is the drag handle.
 2. **Controls bar** — "Clear All" button and an item count.
-3. **Chart area** — a `<canvas>` where Chart.js renders the scatterplot.
+3. **Chart area** — two stacked `<canvas>` sections: `#ebay-scatter-sold-wrap` (sold listings) and `#ebay-scatter-unsold-wrap` (active listings). Each section is hidden until it has data.
 4. **Resize handle** — an invisible 6px strip on the panel's free edge.
 
 When the panel is closed, a small tab button (`#ebay-scatter-toggle`, the 📈 icon) appears on the docked edge so the panel can be reopened.
@@ -64,6 +64,8 @@ The active dock side is tracked by `dockSide` in `src/dock.js`. `setDockSide(sid
 
 Both the panel header and the toggle button are draggable. When you start dragging, the element detaches from its edge and follows the mouse freely. As the mouse gets within 80px of any viewport edge, a semi-transparent blue overlay (`#ebay-scatter-snap-preview`) appears showing where it will snap. On mouse release, the element always snaps to the nearest edge — there is no free-floating state. Releasing without having moved (a plain click) leaves the element on its current edge.
 
+For the toggle button, the detach (removing dock classes and pinning inline position) is deferred until the first `mousemove` event, so a plain click never visually alters the button.
+
 ## Resizing
 
 The resize handle sits on the panel's free edge (the edge facing the page content). Dragging it inward expands the panel; dragging outward contracts it. The chart re-renders immediately during the drag. Switching dock sides resets the panel to its default size.
@@ -72,16 +74,16 @@ The resize handle sits on the panel's free edge (the edge facing the page conten
 
 Rather than relying on eBay's CSS class names (which change frequently), the extension uses content-based heuristics to pull data from each listing card:
 
-- **Price** — finds a leaf element whose entire text matches `$X.XX`; skips items where that price has a strikethrough style (best-offer listings)
-- **Shipping** — finds a nearby leaf element containing "delivery" or "shipping" and a `$` amount; recognises "free shipping/delivery" as $0
-- **Date** — finds a leaf element whose text starts with "Sold " and parses the date from it, stored as `YYYY-MM-DD` formatted from local date components (so the stored day matches what eBay displayed, regardless of the user's timezone)
+- **Price** — finds a leaf element whose entire text matches `$X.XX`; skips items where that price has a strikethrough style (best-offer accepted). Returns `{ price, priceHigh? }` — `priceHigh` is set when a second non-struck `$X.XX` span is found in the same parent element (range pricing, e.g. `$8.99 to $18.99`).
+- **Shipping** — finds a nearby leaf element containing "delivery" or "shipping" and a `$` amount, or a `+$X.XX` leaf (the split-span pattern on active listings where the delivery amount and "delivery" text are in separate spans); recognises "free shipping/delivery" as $0.
+- **Date** — finds a leaf element whose text starts with "Sold " and parses the date from it, stored as `YYYY-MM-DD` formatted from local date components (so the stored day matches what eBay displayed, regardless of the user's timezone). Returns `null` for active (unsold) listings which have no sold date.
 - **Item ID** — reads `data-listingid` on the card element, with a fallback to parsing the `/itm/<id>` URL
 
-Items that fail any of these checks (missing price, missing date, best-offer) get no checkbox injected, which keeps the "Plot all" checkbox state accurate. Obvious non-listings (ad/promo tiles) are marked and skipped permanently; a real listing card that simply hasn't finished rendering is left unmarked and retried on the next observer pass.
+`extractItemData` returns `null` only for best-offer or unparseable-price items. Items with a sold date get `type: 'sold'`; items without get `type: 'unsold'` and today's local date as a fallback (so they appear in the active-listings chart). Items in localStorage without a `type` field (saved before this field existed) are treated as `'sold'`. Non-listings (ad/promo tiles) are marked and skipped permanently; a real listing card that simply hasn't finished rendering is left unmarked and retried on the next observer pass.
 
 ## Checkboxes and "Plot all"
 
-Each valid listing gets a small "Plot" checkbox injected into its card. Checking it saves the item's data to `localStorage` immediately (each change persists on its own, so a fast multi-select can't drop selections); unchecking removes it. The chart re-render is debounced (150 ms) so a burst of selections redraws once.
+Each valid listing gets a small "Plot" checkbox injected into its card. Checking it saves the item's data to `localStorage` immediately (each change persists on its own, so a fast multi-select can't drop selections), and calls `openPanel()` to open the panel if it is currently minimized. Unchecking removes it. The chart re-render is debounced (150 ms) so a burst of selections redraws once.
 
 The "Plot all" checkbox sits above the results list and has three visual states using the browser's native `indeterminate` property:
 
@@ -95,7 +97,13 @@ The "Plot all" checkbox sits above the results list and has three visual states 
 
 ## Chart
 
-Chart.js renders a scatter chart with sale dates on the x-axis and total price (item + shipping) on the y-axis. The x-axis uses raw millisecond timestamps with a custom tick formatter for `YYYY-MM-DD` labels — no date adapter plugin is needed. The chart instance is updated in place rather than destroyed and recreated, which avoids flickering.
+The panel contains two independent chart sections, each visible only when items of that type are selected:
+
+**Sold listings** (blue dots) — scatter chart with sale date (millisecond timestamp) on the x-axis and total price on the y-axis. The x-axis uses a custom tick formatter for `YYYY-MM-DD` labels — no date adapter needed.
+
+**Active listings** (blue dots) — strip/dot chart for price distribution. Items are sorted by price; x values are centered around 0 (sequential sort index offset by half the count) so points expand outward from the center regardless of how many there are. A minimum half-range of 5 units prevents a small cluster from stretching across the full chart width. x-axis tick labels are hidden. Range-priced items show only a vertical line with no dot.
+
+Both charts use an inline `rangeLinesPlugin` that draws a vertical line through any data point with a `priceHigh` value (range-priced listings). Both update in place rather than destroying and recreating. `chartInstance` (sold) and `chartInstanceUnsold` (active) are both in `src/chart.js` and referenced by `src/dock.js` and `src/panel.js` for resize handling.
 
 ## Handling eBay's dynamic page updates
 
@@ -123,7 +131,7 @@ There's no bundler for the extension's own code, but `web-ext` (Mozilla's tool) 
 - `npm run build` — vendors Chart.js, then produces a `.zip` in `web-ext-artifacts/`
 - `npm run sign` — submits to addons.mozilla.org (AMO) as a listed add-on
 
-`webExt.ignoreFiles` in `package.json` controls what's left out of the package: `node_modules/`, `scripts/`, `test/`, and the docs are excluded; `vendor/` is included. The full submission process is documented in `SUBMITTING.md`.
+`webExt.ignoreFiles` in `package.json` controls what's left out of the package: `node_modules/`, `scripts/`, `test/`, and the docs are excluded; `vendor/` is included.
 
 ## Testing
 

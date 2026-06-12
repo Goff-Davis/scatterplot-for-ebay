@@ -3,3 +3,4 @@ const STORAGE_KEY = 'ebay_scatterplot_items';
 const MAX_ITEMS = 200;
 const DOCK_KEY = 'ebay_scatterplot_dock';
 const SNAP_THRESHOLD = 80;
+const PANEL_OPEN_KEY = 'ebay_scatterplot_panel_open';

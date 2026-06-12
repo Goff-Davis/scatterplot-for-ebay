@@ -1,6 +1,6 @@
 # Scatterplot for eBay
 
-A Firefox extension that adds a price history panel to eBay sold/completed search results. Select listings to plot their sale prices over time.
+A Firefox extension that adds a price history panel to eBay search pages. Select listings to plot their sale prices — sold listings are charted by sale date; active listings are shown in a price-distribution view.
 
 > **eBay.com only.** International eBay sites (ebay.co.uk, ebay.de, …) aren't supported — the extension matches `*://*.ebay.com/sch/*`, and its date/price/keyword parsing assumes the US English layout.
 
@@ -11,7 +11,7 @@ A Firefox extension that adds a price history panel to eBay sold/completed searc
 - **"Plot all"** checkbox to select or deselect all valid listings at once
 - **Drag to redock** — drag the panel header or the toggle tab to move the panel to a different edge
 - **Resizable** — drag the panel's free edge to expand or contract it
-- **Persists across page loads** — selected items and dock position are saved in `localStorage`
+- **Persists across page loads** — selected items, dock position, and panel open/closed state are saved in `localStorage`
 - Handles infinite scroll and pagination automatically
 
 ## Installation
@@ -29,12 +29,13 @@ The extension will remain active until Firefox is closed. Repeat step 4 after re
 
 ## Usage
 
-1. Go to an eBay search and filter to **Sold listings** (or **Completed listings**)
-   The URL must contain `LH_Sold=1`
-2. The price history panel appears on the right side of the page
+1. Go to any eBay search page — the 📈 tab appears on the edge of the screen
+2. Click the 📈 tab to open the price history panel (or check a listing to open it automatically)
 3. Check the **Plot** box on any listing to add it to the chart
 4. Use **Plot all** to select everything on the page at once
-5. Hover over a point on the chart to see the item title, date, and price
+5. Hover over a point on the chart to see the item title and price
+
+**Sold vs. active listings:** Sold listings are charted by sale date. Active (unsold) listings appear in a separate "Active Listings" strip chart sorted by price — the x-axis spreads items horizontally so price clusters are visible. Both chart sections appear in the same panel when you have both types selected.
 
 **Across pages:** Your selections are saved, so you can move to the next page of results and keep adding listings — the chart accumulates points from every page you visit.
 

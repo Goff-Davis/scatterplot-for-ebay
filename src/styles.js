@@ -65,7 +65,22 @@ function injectStyles() {
     #ebay-scatter-status { font-size: 12px; color: #888; }
     #ebay-scatter-chart-wrap {
       flex: 1; min-height: 0; min-width: 0; padding: 8px; position: relative;
+      display: flex; flex-direction: column;
     }
+    #ebay-scatter-sold-wrap,
+    #ebay-scatter-unsold-wrap {
+      display: none; flex: 1; flex-direction: column; min-height: 0;
+    }
+    #ebay-scatter-sold-wrap.visible,
+    #ebay-scatter-unsold-wrap.visible { display: flex; }
+    #ebay-scatter-sold-wrap.visible + #ebay-scatter-unsold-wrap.visible {
+      border-top: 1px solid #3a3a3a;
+    }
+    .ebay-scatter-section-label {
+      font-size: 11px; color: #666; padding: 2px 0; flex-shrink: 0;
+    }
+    #ebay-scatter-sold-wrap canvas,
+    #ebay-scatter-unsold-wrap canvas { flex: 1; min-height: 0; display: block; }
     #ebay-scatter-placeholder {
       position: absolute; inset: 0;
       display: flex; align-items: center; justify-content: center;

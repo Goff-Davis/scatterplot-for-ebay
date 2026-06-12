@@ -13,7 +13,14 @@ function buildPanel() {
       </div>
       <div id="ebay-scatter-chart-wrap">
         <div id="ebay-scatter-placeholder">Check items below to plot prices</div>
-        <canvas id="ebay-scatter-canvas"></canvas>
+        <div id="ebay-scatter-sold-wrap">
+          <div class="ebay-scatter-section-label">Sold Listings</div>
+          <canvas id="ebay-scatter-canvas"></canvas>
+        </div>
+        <div id="ebay-scatter-unsold-wrap">
+          <div class="ebay-scatter-section-label">Active Listings</div>
+          <canvas id="ebay-scatter-canvas-unsold"></canvas>
+        </div>
       </div>
     </div>
     <div id="ebay-scatter-resize"></div>
@@ -29,6 +36,10 @@ function buildPanel() {
   const preview = document.createElement('div');
   preview.id = 'ebay-scatter-snap-preview';
   document.body.appendChild(preview);
+
+  // Start minimized — panel opens on first interaction (toggle click or checkbox).
+  panel.style.display = 'none';
+  toggle.style.display = 'block';
 
   // Shows the snap-target overlay when the cursor is near a viewport edge.
   const showSnapPreview = (e) => {
@@ -53,6 +64,7 @@ function buildPanel() {
     .addEventListener('click', () => {
       panel.style.display = 'none';
       toggle.style.display = 'block';
+      try { localStorage.removeItem(PANEL_OPEN_KEY); } catch { /* non-fatal */ }
     });
   toggle.addEventListener('click', () => {
     if (toggleDragMoved) {
@@ -61,6 +73,7 @@ function buildPanel() {
     }
     panel.style.display = 'flex';
     toggle.style.display = 'none';
+    try { localStorage.setItem(PANEL_OPEN_KEY, '1'); } catch { /* non-fatal */ }
   });
   document
     .getElementById('ebay-scatter-clear')
@@ -88,6 +101,8 @@ function buildPanel() {
   let toggleDragMoved = false;
   let toggleDragOffX = 0,
     toggleDragOffY = 0;
+  let togglePinLeft = 0,
+    togglePinTop = 0;
 
   toggle.addEventListener('mousedown', (e) => {
     isToggleDragging = true;
@@ -95,14 +110,8 @@ function buildPanel() {
     const rect = toggle.getBoundingClientRect();
     toggleDragOffX = e.clientX - rect.left;
     toggleDragOffY = e.clientY - rect.top;
-    toggle.style.left = rect.left + 'px';
-    toggle.style.top = rect.top + 'px';
-    toggle.style.right = 'auto';
-    toggle.style.bottom = 'auto';
-    toggle.style.transform = 'none';
-    ['dock-right', 'dock-left', 'dock-top', 'dock-bottom'].forEach((c) =>
-      toggle.classList.remove(c),
-    );
+    togglePinLeft = rect.left;
+    togglePinTop = rect.top;
     e.preventDefault();
   });
 
@@ -143,6 +152,23 @@ function buildPanel() {
   // One mousemove + one mouseup dispatch on whichever operation is active. The
   // flags are mutually exclusive — each mousedown starts exactly one.
   document.addEventListener('mousemove', (e) => {
+    if (e.buttons === 0) {
+      if (isResizing) {
+        isResizing = false;
+        resizeHandle.classList.remove('resizing');
+      } else if (isToggleDragging) {
+        isToggleDragging = false;
+        preview.style.display = 'none';
+        setDockSide(dockSide);
+      } else if (isDragging) {
+        isDragging = false;
+        header.classList.remove('dragging');
+        panel.classList.remove('dragging');
+        preview.style.display = 'none';
+        setDockSide(dockSide);
+      }
+      return;
+    }
     if (isResizing) {
       let newDim;
       switch (dockSide) {
@@ -181,8 +207,21 @@ function buildPanel() {
       if (chartInstance) {
         chartInstance.resize();
       }
+      if (chartInstanceUnsold) {
+        chartInstanceUnsold.resize();
+      }
     } else if (isToggleDragging) {
-      toggleDragMoved = true;
+      if (!toggleDragMoved) {
+        toggle.style.left = togglePinLeft + 'px';
+        toggle.style.top = togglePinTop + 'px';
+        toggle.style.right = 'auto';
+        toggle.style.bottom = 'auto';
+        toggle.style.transform = 'none';
+        ['dock-right', 'dock-left', 'dock-top', 'dock-bottom'].forEach((c) =>
+          toggle.classList.remove(c),
+        );
+        toggleDragMoved = true;
+      }
       toggle.style.left = e.clientX - toggleDragOffX + 'px';
       toggle.style.top = e.clientY - toggleDragOffY + 'px';
       showSnapPreview(e);
@@ -201,10 +240,8 @@ function buildPanel() {
     } else if (isToggleDragging) {
       isToggleDragging = false;
       preview.style.display = 'none';
-      if (toggleDragMoved) {
-        setDockSide(nearestEdge(e.clientX, e.clientY));
-        // toggle.style.display stays "block" — panel remains closed
-      }
+      setDockSide(toggleDragMoved ? nearestEdge(e.clientX, e.clientY) : dockSide);
+      // toggle.style.display stays "block" — panel remains closed
     } else if (isDragging) {
       isDragging = false;
       header.classList.remove('dragging');

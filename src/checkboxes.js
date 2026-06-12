@@ -1,10 +1,20 @@
 let debounceTimer = null;
 
+function openPanel() {
+  const p = document.getElementById('ebay-scatter-panel');
+  const t = document.getElementById('ebay-scatter-toggle');
+  if (p && p.style.display === 'none') {
+    p.style.display = 'flex';
+    t.style.display = 'none';
+    try { localStorage.setItem(PANEL_OPEN_KEY, '1'); } catch { /* non-fatal */ }
+  }
+}
+
 // Caches each card's extracted data so the change handler and "Plot all" don't
 // re-run extraction (which walks the DOM and calls getComputedStyle).
 const cardData = new WeakMap();
 
-function injectCheckbox(card) {
+function injectCheckbox(card, savedIds) {
   if (card.dataset.scatterInjected) {
     return;
   }
@@ -35,7 +45,7 @@ function injectCheckbox(card) {
   const cb = document.createElement('input');
   cb.type = 'checkbox';
   cb.dataset.itemId = id;
-  cb.checked = loadItems().some((i) => i.id === id);
+  cb.checked = (savedIds ?? new Set(loadItems().map((i) => i.id))).has(id);
 
   label.appendChild(cb);
   label.appendChild(document.createTextNode(' Plot'));
@@ -55,6 +65,7 @@ function injectCheckbox(card) {
         items.push(data);
         saveItems(items);
       }
+      openPanel();
     } else {
       saveItems(items.filter((i) => i.id !== id));
     }
@@ -145,11 +156,23 @@ function buildPlotAllControl(listContainer) {
         });
 
       saveItems(items);
+      openPanel();
       reconcileCheckboxes(); // honor the MAX_ITEMS cap so boxes match storage
       renderChart(loadItems());
       syncPlotAll();
     } else {
-      clearAll();
+      // Only remove items visible on this page — items from other pages/types stay.
+      const pageIds = new Set(
+        Array.from(document.querySelectorAll('.ebay-scatter-cb input')).map(
+          (box) => box.dataset.itemId,
+        ),
+      );
+      saveItems(loadItems().filter((i) => !pageIds.has(i.id)));
+      document.querySelectorAll('.ebay-scatter-cb input').forEach((box) => {
+        box.checked = false;
+      });
+      renderChart(loadItems());
+      syncPlotAll();
     }
   });
 }

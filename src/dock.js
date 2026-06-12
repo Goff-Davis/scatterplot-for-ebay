@@ -18,7 +18,7 @@ function setDockSide(side) {
   const toggle = document.getElementById('ebay-scatter-toggle');
 
   dockSide = side;
-  localStorage.setItem(DOCK_KEY, side);
+  try { localStorage.setItem(DOCK_KEY, side); } catch { /* non-fatal */ }
 
   ['dock-right', 'dock-left', 'dock-top', 'dock-bottom'].forEach((c) => {
     panel.classList.remove(c);
@@ -38,5 +38,8 @@ function setDockSide(side) {
 
   if (chartInstance) {
     chartInstance.resize();
+  }
+  if (chartInstanceUnsold) {
+    chartInstanceUnsold.resize();
   }
 }

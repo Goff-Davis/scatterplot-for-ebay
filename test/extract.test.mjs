@@ -48,19 +48,19 @@ test('extractDate returns null when there is no Sold date', () => {
 // ── extractPrice ─────────────────────────────────────────────────────────────
 
 test('extractPrice reads a bare $ price (free shipping → item only)', () => {
-  assert.equal(extractPrice(parse(NORMAL_FREE_SHIPPING)), 69.99);
+  assert.equal(extractPrice(parse(NORMAL_FREE_SHIPPING)).price, 69.99);
 });
 
 test('extractPrice adds charged shipping (float sum → tolerance)', () => {
-  const total = extractPrice(parse(CHARGED_SHIPPING));
-  assert.ok(Math.abs(total - 150.98) < 0.005, `got ${total}`);
+  const r = extractPrice(parse(CHARGED_SHIPPING));
+  assert.ok(Math.abs(r.price - 150.98) < 0.005, `got ${r.price}`);
 });
 
 test('extractPrice sums synthetic item + delivery, ignores free delivery', () => {
   assert.ok(
-    Math.abs(extractPrice(card('<span>$10.00</span><span>+$2.50 delivery</span>')) - 12.5) < 0.005,
+    Math.abs(extractPrice(card('<span>$10.00</span><span>+$2.50 delivery</span>')).price - 12.5) < 0.005,
   );
-  assert.equal(extractPrice(card('<span>$10.00</span><span>Free delivery</span>')), 10);
+  assert.equal(extractPrice(card('<span>$10.00</span><span>Free delivery</span>')).price, 10);
 });
 
 test('extractPrice returns null for best-offer (strikethrough) prices', () => {
@@ -72,7 +72,13 @@ test('extractPrice: bare $ only — a single-leaf "US $" is not matched (documen
   // current regex would skip it. This documents that assumption rather than
   // asserting it is desirable.
   assert.equal(extractPrice(card('<span>US $107.94</span>')), null);
-  assert.equal(extractPrice(card('<span>$107.94</span>')), 107.94);
+  assert.equal(extractPrice(card('<span>$107.94</span>')).price, 107.94);
+});
+
+test('extractPrice detects a $X to $Y price range', () => {
+  const d = extractPrice(card('<span>$8.99</span><span> to </span><span>$18.99</span>'));
+  assert.ok(Math.abs(d.price - 8.99) < 0.005);
+  assert.ok(Math.abs(d.priceHigh - 18.99) < 0.005);
 });
 
 // ── extractItemId ────────────────────────────────────────────────────────────
@@ -105,11 +111,12 @@ test('extractTitle falls back to the card aria-label', () => {
 
 // ── extractItemData (integration) ────────────────────────────────────────────
 
-test('extractItemData returns a full record for a valid card', () => {
+test('extractItemData returns a full record for a valid sold card', () => {
   const d = extractItemData(parse(NORMAL_FREE_SHIPPING));
   assert.equal(d.id, '336541855208');
   assert.equal(d.date, '2026-04-24');
   assert.equal(d.price, 69.99);
+  assert.equal(d.type, 'sold');
   assert.ok(d.title.length > 0);
 });
 
@@ -117,8 +124,15 @@ test('extractItemData returns null for best-offer cards', () => {
   assert.equal(extractItemData(parse(BEST_OFFER)), null);
 });
 
-test('extractItemData returns null when the date is missing', () => {
+test("extractItemData uses today's date and type='unsold' for active listings", () => {
   const li = card('<a href="/itm/111">t</a><span>$5.00</span>');
   li.setAttribute('data-listingid', '111');
-  assert.equal(extractItemData(li), null);
+  const item = extractItemData(li);
+  assert.ok(item !== null);
+  assert.match(item.date, /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(item.type, 'unsold');
+});
+
+test("extractItemData sets type='sold' for sold listings", () => {
+  assert.equal(extractItemData(parse(NORMAL_FREE_SHIPPING)).type, 'sold');
 });

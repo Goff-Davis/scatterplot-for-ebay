@@ -42,32 +42,48 @@ function parseAmount(text) {
 function extractPrice(card) {
   // Find a leaf element whose entire text is a bare dollar amount: "$107.94"
   const leaves = leafElements(card, 'span, div');
-  const priceEl = leaves.find((el) =>
-    /^\$[\d,]+\.?\d*$/.test(el.textContent.trim()),
-  );
+  const priceEl = leaves.find((el) => {
+    if (!/^\$[\d,]+\.?\d*$/.test(el.textContent.trim())) { return false; }
+    let node = el;
+    for (let i = 0; i < 4; i++) {
+      if (!node) { break; }
+      if (window.getComputedStyle(node).textDecoration.includes('line-through')) { return false; }
+      node = node.parentElement;
+    }
+    return true;
+  });
+  if (!priceEl) { return null; }
 
-  if (!priceEl) {
+  const low = parseAmount(priceEl.textContent);
+  if (isNaN(low)) {
     return null;
   }
 
-  // Best offer: price is crossed out
-  let node = priceEl;
-  for (let i = 0; i < 4; i++) {
-    if (!node) {
-      break;
+  // Price range: look for a second non-struck $X.XX sibling in the same parent element
+  // (e.g. "$8.99 to $18.99" on active listings — three spans in one attribute row)
+  let high;
+  const siblingPrices = Array.from(
+    priceEl.parentElement.querySelectorAll('span, div'),
+  ).filter((el) => {
+    if (el === priceEl || !/^\$[\d,]+\.?\d*$/.test(el.textContent.trim())) {
+      return false;
     }
-
-    if (window.getComputedStyle(node).textDecoration.includes('line-through')) {
-      return null;
+    // Exclude struck-through siblings (discounted original prices on sold cards)
+    let n = el;
+    for (let i = 0; i < 4; i++) {
+      if (!n) { break; }
+      if (window.getComputedStyle(n).textDecoration.includes('line-through')) {
+        return false;
+      }
+      n = n.parentElement;
     }
-
-    node = node.parentElement;
-  }
-
-  const sold = parseAmount(priceEl.textContent);
-  if (isNaN(sold)) {
-    console.warn('[ebay-scatter] Could not parse price:', priceEl.textContent);
-    return null;
+    return true;
+  });
+  if (siblingPrices.length > 0) {
+    const h = parseAmount(
+      siblingPrices[siblingPrices.length - 1].textContent,
+    );
+    if (!isNaN(h) && h > low) { high = h; }
   }
 
   // Find shipping: leaf element containing "delivery" or "shipping" and a "$" amount
@@ -88,9 +104,17 @@ function extractPrice(card) {
         break;
       }
     }
+
+    // "+$X.XX" leaf — delivery cost displayed in its own span, separate from "delivery" text
+    if (/^\+\$[\d,]+(?:\.\d+)?\s*$/.test(text)) {
+      const parsed = parseAmount(text);
+      if (!isNaN(parsed)) { shipping = parsed; break; }
+    }
   }
 
-  return sold + shipping;
+  return high !== undefined
+    ? { price: low + shipping, priceHigh: high + shipping }
+    : { price: low + shipping };
 }
 
 function extractDate(card) {
@@ -121,17 +145,33 @@ function extractDate(card) {
 
 function extractItemData(card) {
   const id = extractItemId(card);
-  const price = extractPrice(card); // returns null for best-offer items
-  const date = extractDate(card);
+  const priceData = extractPrice(card);
 
-  if (!id || price === null || !date) {
+  if (!id || !priceData) {
     return null;
   }
 
-  return {
+  const soldDate = extractDate(card);
+  let date;
+  if (soldDate) {
+    date = soldDate;
+  } else {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
+  const item = {
     id,
     title: extractTitle(card) || 'Unknown item',
     date,
-    price,
+    price: priceData.price,
+    type: soldDate ? 'sold' : 'unsold',
   };
+
+  if (priceData.priceHigh !== undefined) {
+    item.priceHigh = priceData.priceHigh;
+  }
+
+  return item;
 }
