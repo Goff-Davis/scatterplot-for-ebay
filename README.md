@@ -50,7 +50,7 @@ No build step is needed to develop. After editing any file in `src/`:
 1. Go to `about:debugging#/runtime/this-firefox`
 2. Find the extension and click **Reload**
 
-Run the unit tests with `npm test` (covers the data-extraction logic in `src/extract.js`).
+Run the unit tests with `npm test` (covers extraction, storage, dock geometry, chart math, and checkbox state).
 
 To package the extension for distribution, run `npm run lint` and `npm run build`.
 

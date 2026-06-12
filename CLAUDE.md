@@ -29,23 +29,30 @@ Source is formatted with 2-space indent, single quotes, semicolons, and braces o
 - `npm run build` — vendors Chart.js, then `web-ext build` → `web-ext-artifacts/scatterplot_for_ebay-<version>.zip`
 - `npm run sign` — submits to AMO as a listed add-on (needs `WEB_EXT_API_KEY` / `WEB_EXT_API_SECRET`)
 
-Packaging ignores are under `webExt.ignoreFiles` in `package.json` — `node_modules/`, `scripts/`, `test/`, docs, and any `*.htm`/`*_files/**` reference pages are excluded, but `vendor/` IS shipped. Bump `version` in both `manifest.json` and `package.json` per release.
+Packaging ignores are under `webExt.ignoreFiles` in `package.json` — `node_modules/`, `scripts/`, `test/`, and docs, but `vendor/` IS shipped. Bump `version` in both `manifest.json` and `package.json` per release.
 
 ## Testing
 
 ```bash
 npm test    # node:test runner; cross-env pins TZ=Australia/Sydney (cross-platform)
+TZ=Australia/Sydney node --test test/storage.test.mjs   # run one file (keep the TZ pin)
 ```
 
 Requires **Node ≥ 21** (declared in `package.json` `engines`): the test-file glob is expanded by Node's test runner, not the shell, so the script double-quotes it to work in both POSIX `sh` and Windows `cmd`.
 
-Unit tests cover the pure extraction functions in `src/extract.js` (the heuristic, eBay-markup-fragile core). Files live in `test/`:
-- `test/extract.test.mjs` — the cases (`parseAmount`, `extractPrice`, `extractDate`, `extractItemId`, `extractTitle`, `extractItemData`)
-- `test/helpers/load.mjs` — loads the real `src/extract.js` into a jsdom-backed `node:vm` context and returns its functions, so the **source stays free of any test-only exports** and tests run the exact shipped code
-- `test/fixtures/*.html` — real listing cards captured from a live sold page, trimmed and self-contained (no external assets), with expected values asserted against the real data
+The suite locks down the core logic that must stay stable regardless of eBay's markup: extraction (`src/extract.js`), the storage contract (`src/storage.js`), dock geometry (`nearestEdge`), chart data-shaping math (`src/chart.js`), and the checkbox state reconcilers (`src/checkboxes.js`). Coverage is **deliberately scoped** (see `TEST_PLAN.md`) — every test is labeled with one of three buckets: **invariant** (synthetic DOM, must hold forever), **documents-behavior** (a current/debatable choice pinned so a change is noticed), or **markup-canary** (a real captured eBay card; kept few, fails loudly when the markup shifts). Files live in `test/`:
+- `test/extract.test.mjs` — `parseAmount`, `extractPrice`, `extractDate`, `extractItemId`, `extractTitle`, `extractItemData`, plus the markup-canary fixtures
+- `test/storage.test.mjs` — `loadItems`/`saveItems` degradation + the `MAX_ITEMS` cap
+- `test/dock.test.mjs` — `nearestEdge` geometry (incl. the center tie-break)
+- `test/chart.test.mjs` — `renderChart` data-shaping (centering, range line-only, priceHigh-aware y-max) against a fake Chart
+- `test/checkboxes.test.mjs` — `syncPlotAll` tri-state + `reconcileCheckboxes`
+- `test/helpers/load.mjs` — `loadModules(files, { url, setup })` loads any `src/` files into one shared jsdom-backed `node:vm` context (mirroring the content-script scope), so the **source stays free of any test-only exports** and tests run the exact shipped code; `loadExtract` is the extract-only shorthand
+- `test/helpers/chart-stub.mjs` — `makeChartStub()`, a fake Chart.js constructor that records the config it was built with
+- `test/fixtures/*.html` — real listing cards (sold-search **and** active-search), trimmed and self-contained (no external assets), with expected values asserted against the real data
 
 Key conventions:
 - **The `test` script pins `TZ=Australia/Sydney`** (a positive UTC offset) on purpose: `extractDate` must store the displayed calendar date, and the original H1 bug (UTC round-trip via `toISOString()`) only shows up at a positive offset. Running there means any reintroduction fails the date tests even on US machines.
+- **`loadModules`/`loadExtract` return vm-realm values**: objects and arrays they hand back are constructed inside the `node:vm` sandbox, so `assert/strict` `deepEqual` rejects them on prototype identity — assert structural values via `JSON.stringify` (or spread `[...arr]` into the test realm), not `deepEqual`.
 - **Summed prices are floats** (`item + shipping`), so assert them with a tolerance, never a hand-rounded literal.
 - **`extractPrice` returns `{ price, priceHigh? }` or `null`** — `priceHigh` is set for range-priced listings (e.g. `$8.99 to $18.99`).
 - **Best-offer/strikethrough**: jsdom's `getComputedStyle` reflects inline styles but not class-based stylesheet rules, so the best-offer fixture carries an inline `text-decoration: line-through` (the live page uses a CSS class); `extractPrice` then correctly returns `null`.

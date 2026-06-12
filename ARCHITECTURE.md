@@ -30,9 +30,14 @@ src/
   panel.js             Build the panel DOM and handle all mouse interaction
   init.js              Entry point — startup sequence, panel state restore, scroll observers
 test/
-  extract.test.mjs     Unit tests for the extraction logic
-  helpers/load.mjs     Loads src/extract.js into a jsdom context for testing
-  fixtures/            Real eBay card HTML used by the tests
+  extract.test.mjs     Unit tests for the extraction logic + markup-canary fixtures
+  storage.test.mjs     loadItems/saveItems degradation + MAX_ITEMS cap
+  dock.test.mjs        nearestEdge geometry
+  chart.test.mjs       renderChart data-shaping math (against a fake Chart)
+  checkboxes.test.mjs  syncPlotAll tri-state + reconcileCheckboxes
+  helpers/load.mjs     Loads any src/ files into a shared jsdom context for testing
+  helpers/chart-stub.mjs  Fake Chart.js constructor that records its config
+  fixtures/            Real eBay card HTML (sold + active) used by the tests
 node_modules/          Dev dependencies (Chart.js source, web-ext, jsdom) — never shipped
 ```
 
@@ -135,8 +140,8 @@ There's no bundler for the extension's own code, but `web-ext` (Mozilla's tool) 
 
 ## Testing
 
-The pure data-extraction functions in `src/extract.js` — the part most likely to break when eBay changes its markup — are covered by unit tests. Run them with `npm test`.
+Unit tests (`npm test`) lock down the core logic that must stay stable regardless of eBay's markup: extraction (`src/extract.js`), the storage contract (`src/storage.js`), dock geometry (`nearestEdge`), chart data-shaping math (`src/chart.js`), and the checkbox state reconcilers (`src/checkboxes.js`). Coverage is deliberately scoped (see `TEST_PLAN.md`): every test is one of three buckets — **invariant** (synthetic DOM, must hold forever), **documents-behavior** (a current choice pinned so a change is noticed), or **markup-canary** (a real captured card, kept few, fails loudly when the markup shifts).
 
-Because the `src/` files have no `export`s (they share one content-script scope), the tests load `src/extract.js` into a jsdom-backed `node:vm` sandbox (`test/helpers/load.mjs`) and call its functions directly. The tests therefore run the exact code that ships, without adding any test-only exports to the source.
+Because the `src/` files have no `export`s (they share one content-script scope), the tests load the real source into a jsdom-backed `node:vm` sandbox and call its functions directly — running the exact code that ships, with no test-only exports. `test/helpers/load.mjs` exposes `loadModules(files, { url, setup })`, which loads any combination of `src/` files into one shared context (separate `runInContext` calls share top-level `const`/`let`, mirroring the content-script scope); chart math is exercised against a fake Chart.js constructor (`test/helpers/chart-stub.mjs`).
 
-Fixtures (`test/fixtures/*.html`) are real listing cards captured from a live sold-search page, then trimmed and made self-contained. The suite is pinned to a positive-offset timezone (`TZ=Australia/Sydney`) so that any regression in the date parsing — which must store the date eBay displayed, not a UTC-shifted one — fails the tests even on machines in the Americas.
+Fixtures (`test/fixtures/*.html`) are real listing cards captured from live sold-search **and** active-search pages, then trimmed and made self-contained. The suite is pinned to a positive-offset timezone (`TZ=Australia/Sydney`) so that any regression in the date parsing — which must store the date eBay displayed, not a UTC-shifted one — fails the tests even on machines in the Americas.
