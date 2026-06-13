@@ -14,7 +14,7 @@ function openPanel() {
 // re-run extraction (which walks the DOM and calls getComputedStyle).
 const cardData = new WeakMap();
 
-function injectCheckbox(card, savedIds) {
+function injectCheckbox(card, savedItemsMap) {
   if (card.dataset.scatterInjected) {
     return;
   }
@@ -45,7 +45,14 @@ function injectCheckbox(card, savedIds) {
   const cb = document.createElement('input');
   cb.type = 'checkbox';
   cb.dataset.itemId = id;
-  cb.checked = (savedIds ?? new Set(loadItems().map((i) => i.id))).has(id);
+  cb.dataset.itemType = data.type;
+
+  // Only pre-check if the stored item has the same type: a sold-listing save
+  // must not cause an active listing (same multi-quantity ID) to appear checked.
+  const savedItem = savedItemsMap
+    ? savedItemsMap.get(id)
+    : loadItems().find((i) => i.id === id);
+  cb.checked = !!savedItem && (savedItem.type || 'sold') === data.type;
 
   label.appendChild(cb);
   label.appendChild(document.createTextNode(' Plot'));
@@ -120,9 +127,10 @@ function syncPlotAll() {
 // MAX_ITEMS, so a bulk selection can drop the oldest items; without this the
 // dropped items' boxes would stay checked and lie about what's plotted.
 function reconcileCheckboxes() {
-  const ids = new Set(loadItems().map((i) => i.id));
+  const itemMap = new Map(loadItems().map((i) => [i.id, i]));
   document.querySelectorAll('.ebay-scatter-cb input').forEach((box) => {
-    box.checked = ids.has(box.dataset.itemId);
+    const saved = itemMap.get(box.dataset.itemId);
+    box.checked = !!saved && (saved.type || 'sold') === (box.dataset.itemType || 'sold');
   });
 }
 
@@ -150,8 +158,13 @@ function buildPlotAllControl(listContainer) {
         .querySelectorAll(':scope > li[data-scatter-injected="1"]')
         .forEach((card) => {
           const data = cardData.get(card);
-          if (data && !items.some((i) => i.id === data.id)) {
-            items.push(data);
+          if (data) {
+            const idx = items.findIndex((i) => i.id === data.id);
+            if (idx === -1) {
+              items.push(data);
+            } else if ((items[idx].type || 'sold') !== data.type) {
+              items[idx] = data;
+            }
           }
         });
 

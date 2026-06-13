@@ -13,10 +13,10 @@ if (!container) {
     'Could not find listings — eBay may have changed its layout';
   console.warn('[ebay-scatter] Results container not found');
 } else {
-  const savedIds = new Set(loadItems().map((i) => i.id));
+  const savedItemsMap = new Map(loadItems().map((i) => [i.id, i]));
   container
     .querySelectorAll(':scope > li')
-    .forEach((card) => injectCheckbox(card, savedIds));
+    .forEach((card) => injectCheckbox(card, savedItemsMap));
   buildPlotAllControl(container);
   renderChart(loadItems());
   syncPlotAll();
@@ -30,6 +30,7 @@ if (!container) {
     container
       .querySelectorAll(':scope > li:not([data-scatter-injected])')
       .forEach((card) => injectCheckbox(card));
+    syncPlotAll();
   });
   listObserver.observe(container, { childList: true });
 }

@@ -20,12 +20,13 @@ function buildCheckboxDom(doc, perItem) {
   all.id = 'ebay-scatter-plot-all';
   doc.body.appendChild(all);
 
-  for (const { id, checked } of perItem) {
+  for (const { id, itemType, checked } of perItem) {
     const label = doc.createElement('label');
     label.className = 'ebay-scatter-cb';
     const cb = doc.createElement('input');
     cb.type = 'checkbox';
     cb.dataset.itemId = id;
+    if (itemType !== undefined) cb.dataset.itemType = itemType;
     cb.checked = checked;
     label.appendChild(cb);
     doc.body.appendChild(label);
@@ -85,11 +86,11 @@ test('syncPlotAll: no per-item boxes → no throw, state untouched (early return
 
 test('reconcileCheckboxes: each box reflects whether storage holds its id', () => {
   const s = fresh();
-  s.saveItems([{ id: 'a' }, { id: 'c' }]); // storage holds a and c
+  s.saveItems([{ id: 'a', type: 'sold' }, { id: 'c', type: 'sold' }]);
   buildCheckboxDom(s.document, [
-    { id: 'a', checked: false }, // → should flip to checked
-    { id: 'b', checked: true }, // → should flip to unchecked
-    { id: 'c', checked: false }, // → should flip to checked
+    { id: 'a', itemType: 'sold', checked: false }, // → should flip to checked
+    { id: 'b', itemType: 'sold', checked: true },  // → should flip to unchecked
+    { id: 'c', itemType: 'sold', checked: false }, // → should flip to checked
   ]);
   s.reconcileCheckboxes();
   const checkedOf = (id) =>
@@ -97,4 +98,16 @@ test('reconcileCheckboxes: each box reflects whether storage holds its id', () =
   assert.equal(checkedOf('a'), true);
   assert.equal(checkedOf('b'), false);
   assert.equal(checkedOf('c'), true);
+});
+
+// documents-behavior — the fix for "Plot all on sold then switch to active shows partial"
+test('reconcileCheckboxes: id in storage but different type → unchecked', () => {
+  const s = fresh();
+  s.saveItems([{ id: 'x', type: 'sold' }]); // saved from a sold-listings page
+  buildCheckboxDom(s.document, [
+    { id: 'x', itemType: 'unsold', checked: true }, // same ID, active-page checkbox
+  ]);
+  s.reconcileCheckboxes();
+  const cb = s.document.querySelector('.ebay-scatter-cb input[data-item-id="x"]');
+  assert.equal(cb.checked, false);
 });
