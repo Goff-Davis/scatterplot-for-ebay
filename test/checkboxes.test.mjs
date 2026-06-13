@@ -111,3 +111,42 @@ test('reconcileCheckboxes: id in storage but different type → unchecked', () =
   const cb = s.document.querySelector('.ebay-scatter-cb input[data-item-id="x"]');
   assert.equal(cb.checked, false);
 });
+
+// documents-behavior: per-item change handler coexists sold+unsold records for the same id
+const freshCross = () =>
+  loadModules(['constants.js', 'storage.js', 'extract.js', 'checkboxes.js'], {
+    setup: (sb) => {
+      sb.getComputedStyle = sb.window.getComputedStyle.bind(sb.window);
+      sb.clearTimeout = sb.window.clearTimeout.bind(sb.window);
+      sb.setTimeout = sb.window.setTimeout.bind(sb.window);
+      sb.renderChart = () => {};
+    },
+  });
+
+test('injectCheckbox change handler: cross-type id coexists in storage', () => {
+  const s = freshCross();
+
+  // Pre-store a sold record for id 'X'
+  s.saveItems([{ id: 'X', type: 'sold', price: 10, date: '2024-01-01', title: 'Item X' }]);
+
+  // Build a minimal active listing card for the same id
+  const card = s.document.createElement('li');
+  card.dataset.listingid = 'X';
+  card.innerHTML = '<a href="/itm/X">Item X</a><span>$15.00</span>';
+  s.document.body.appendChild(card);
+
+  s.injectCheckbox(card); // no savedItemsMap → falls back to loadItems()
+
+  const cb = card.querySelector('.ebay-scatter-cb input');
+  // Sold record in storage doesn't match type 'unsold' → starts unchecked
+  assert.equal(cb.checked, false, 'starts unchecked (type mismatch with stored sold record)');
+
+  cb.checked = true;
+  cb.dispatchEvent(new s.window.Event('change', { bubbles: true }));
+
+  // Both records must coexist; the checkbox must stay checked
+  const ids = s.loadItems().map((i) => `${i.id}:${i.type}`);
+  assert.ok(ids.includes('X:sold'),   'sold X preserved');
+  assert.ok(ids.includes('X:unsold'), 'active X added');
+  assert.equal(cb.checked, true, 'checkbox stays checked (no revert from reconcileCheckboxes)');
+});

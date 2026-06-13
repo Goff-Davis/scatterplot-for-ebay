@@ -13,7 +13,7 @@ if (!container) {
     'Could not find listings — eBay may have changed its layout';
   console.warn('[ebay-scatter] Results container not found');
 } else {
-  const savedItemsMap = new Map(loadItems().map((i) => [i.id, i]));
+  const savedItemsMap = new Map(loadItems().map((i) => [`${i.id}:${i.type || 'sold'}`, i]));
   container
     .querySelectorAll(':scope > li')
     .forEach((card) => injectCheckbox(card, savedItemsMap));

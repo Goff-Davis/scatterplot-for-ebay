@@ -34,7 +34,8 @@ test/
   storage.test.mjs     loadItems/saveItems degradation + MAX_ITEMS cap
   dock.test.mjs        nearestEdge geometry
   chart.test.mjs       renderChart data-shaping math (against a fake Chart)
-  checkboxes.test.mjs  syncPlotAll tri-state + reconcileCheckboxes
+  checkboxes.test.mjs  syncPlotAll tri-state, reconcileCheckboxes, injectCheckbox cross-type coexistence
+  panel.test.mjs       buildPanel wiring: font-size input + dark/light theme toggle
   helpers/load.mjs     Loads any src/ files into a shared jsdom context for testing
   helpers/chart-stub.mjs  Fake Chart.js constructor that records its config
   fixtures/            Real eBay card HTML (sold + active) used by the tests
@@ -49,7 +50,7 @@ All `src/` files are loaded as classic (non-module) content scripts into the sam
 
 The panel (`#ebay-scatter-panel`) is a fixed-position overlay injected into the page. It has four sections:
 
-1. **Header** — "Price History" title and a close button. The header is the drag handle.
+1. **Header** — "Price History" title, a font-size input, a dark/light theme toggle, and a close button. The header is the drag handle (mousedown on any of its buttons/input is excluded from drag logic).
 2. **Controls bar** — "Clear All" button and an item count.
 3. **Chart area** — two stacked `<canvas>` sections: `#ebay-scatter-sold-wrap` (sold listings) and `#ebay-scatter-unsold-wrap` (active listings). Each section is hidden until it has data.
 4. **Resize handle** — an invisible 6px strip on the panel's free edge.
@@ -75,6 +76,13 @@ For the toggle button, the detach (removing dock classes and pinning inline posi
 
 The resize handle sits on the panel's free edge (the edge facing the page content). Dragging it inward expands the panel; dragging outward contracts it. The chart re-renders immediately during the drag. Switching dock sides resets the panel to its default size.
 
+## Theme and font size
+
+Two header controls adjust the panel's appearance, both persisted in `localStorage`:
+
+- **Theme toggle** (`#ebay-scatter-theme`, ☉/☾) flips between dark (default) and light. Every themeable color is a CSS custom property declared on `#ebay-scatter-panel` and overridden under `.theme-light`; toggling adds/removes that class on both the panel and the toggle tab. Because Chart.js reads its colors once at construction time, the toggle destroys and recreates both chart instances so they pick up the new variable values.
+- **Font-size input** (`#ebay-scatter-font-size`, default 14px) sets the panel's base size via an inline `style.fontSize`, which survives the inline-style clearing that `setDockSide` does. All child text uses `em` units so it scales from that base. Chart.js axis ticks and tooltips don't inherit CSS font size, so `updateChartFontSizes(size)` patches the live chart instances directly.
+
 ## Data extraction
 
 Rather than relying on eBay's CSS class names (which change frequently), the extension uses content-based heuristics to pull data from each listing card:
@@ -89,6 +97,8 @@ Rather than relying on eBay's CSS class names (which change frequently), the ext
 ## Checkboxes and "Plot all"
 
 Each valid listing gets a small "Plot" checkbox injected into its card. Checking it saves the item's data to `localStorage` immediately (each change persists on its own, so a fast multi-select can't drop selections), and calls `openPanel()` to open the panel if it is currently minimized. Unchecking removes it. The chart re-render is debounced (150 ms) so a burst of selections redraws once.
+
+Storage deduplicates by `id+type` (composite key `"${id}:${type || 'sold'}"`). A multi-quantity eBay item can appear as both a sold listing on one search page and an active listing on another — the two records coexist independently. Unchecking an active listing only removes the active record; a separately saved sold record for the same item is unaffected.
 
 The "Plot all" checkbox sits above the results list and has three visual states using the browser's native `indeterminate` property:
 
@@ -140,7 +150,7 @@ There's no bundler for the extension's own code, but `web-ext` (Mozilla's tool) 
 
 ## Testing
 
-Unit tests (`npm test`) lock down the core logic that must stay stable regardless of eBay's markup: extraction (`src/extract.js`), the storage contract (`src/storage.js`), dock geometry (`nearestEdge`), chart data-shaping math (`src/chart.js`), and the checkbox state reconcilers (`src/checkboxes.js`). Coverage is deliberately scoped (see `TEST_PLAN.md`): every test is one of three buckets — **invariant** (synthetic DOM, must hold forever), **documents-behavior** (a current choice pinned so a change is noticed), or **markup-canary** (a real captured card, kept few, fails loudly when the markup shifts).
+Unit tests (`npm test`) lock down the core logic that must stay stable regardless of eBay's markup: extraction (`src/extract.js`), the storage contract (`src/storage.js`), dock geometry (`nearestEdge`), chart data-shaping math (`src/chart.js`), the checkbox state reconcilers (`src/checkboxes.js`), and the panel's header wiring — font-size input and theme toggle (`src/panel.js`). Coverage is deliberately scoped (see `TEST_PLAN.md`): every test is one of three buckets — **invariant** (synthetic DOM, must hold forever), **documents-behavior** (a current choice pinned so a change is noticed), or **markup-canary** (a real captured card, kept few, fails loudly when the markup shifts).
 
 Because the `src/` files have no `export`s (they share one content-script scope), the tests load the real source into a jsdom-backed `node:vm` sandbox and call its functions directly — running the exact code that ships, with no test-only exports. `test/helpers/load.mjs` exposes `loadModules(files, { url, setup })`, which loads any combination of `src/` files into one shared context (separate `runInContext` calls share top-level `const`/`let`, mirroring the content-script scope); chart math is exercised against a fake Chart.js constructor (`test/helpers/chart-stub.mjs`).
 

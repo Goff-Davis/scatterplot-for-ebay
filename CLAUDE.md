@@ -45,7 +45,8 @@ The suite locks down the core logic that must stay stable regardless of eBay's m
 - `test/storage.test.mjs` — `loadItems`/`saveItems` degradation + the `MAX_ITEMS` cap
 - `test/dock.test.mjs` — `nearestEdge` geometry (incl. the center tie-break)
 - `test/chart.test.mjs` — `renderChart` data-shaping (centering, range line-only, priceHigh-aware y-max) against a fake Chart
-- `test/checkboxes.test.mjs` — `syncPlotAll` tri-state + `reconcileCheckboxes`
+- `test/checkboxes.test.mjs` — `syncPlotAll` tri-state, `reconcileCheckboxes`, and `injectCheckbox` change-handler cross-type coexistence
+- `test/panel.test.mjs` — `buildPanel` DOM/event wiring, font-size input, and dark/light theme toggle
 - `test/helpers/load.mjs` — `loadModules(files, { url, setup })` loads any `src/` files into one shared jsdom-backed `node:vm` context (mirroring the content-script scope), so the **source stays free of any test-only exports** and tests run the exact shipped code; `loadExtract` is the extract-only shorthand
 - `test/helpers/chart-stub.mjs` — `makeChartStub()`, a fake Chart.js constructor that records the config it was built with
 - `test/fixtures/*.html` — real listing cards (sold-search **and** active-search), trimmed and self-contained (no external assets), with expected values asserted against the real data
@@ -56,17 +57,18 @@ Key conventions:
 - **Summed prices are floats** (`item + shipping`), so assert them with a tolerance, never a hand-rounded literal.
 - **`extractPrice` returns `{ price, priceHigh? }` or `null`** — `priceHigh` is set for range-priced listings (e.g. `$8.99 to $18.99`).
 - **Best-offer/strikethrough**: jsdom's `getComputedStyle` reflects inline styles but not class-based stylesheet rules, so the best-offer fixture carries an inline `text-decoration: line-through` (the live page uses a CSS class); `extractPrice` then correctly returns `null`.
+- **Browser globals are absent from the vm sandbox by default** — only `window`, `document`, `localStorage`, and `console` are wired. Any code path that calls other globals must add them in `setup` (e.g. `sb.getComputedStyle = sb.window.getComputedStyle.bind(sb.window)`). Specifically: `renderSoldChart`/`renderUnsoldChart` need `getComputedStyle` (via `getChartColors()`); `injectCheckbox`'s `change` handler needs `clearTimeout`, `setTimeout`, and a stubbed `renderChart`. Missing globals throw `ReferenceError` — but jsdom catches errors thrown inside event listeners and prints them without failing the test, so the suite can show green with noisy output. Wire the globals to silence it.
 
 ## Architecture
 
 Content scripts in `src/` are loaded sequentially by the manifest. All files share the same content script sandbox scope — no IIFE, no ES modules. Top-level `const`/`let`/`function` declarations in one file are accessible to all subsequently loaded files. The content scripts are registered only for eBay search pages (`*://*.ebay.com/sch/*` in the manifest), and `src/init.js` runs unconditionally on all matching pages (no URL guard). Chart.js is loaded first via the manifest (`vendor/chart.js/chart.umd.min.js`) so `window.Chart` is available synchronously — no CDN injection (eBay's CSP blocks it).
 
 **Source files (load order matches manifest):**
-- `src/constants.js` — six `const` values: `RESULTS_SEL`, `STORAGE_KEY`, `MAX_ITEMS`, `DOCK_KEY`, `SNAP_THRESHOLD`, `PANEL_OPEN_KEY`
+- `src/constants.js` — eight `const` values: `RESULTS_SEL`, `STORAGE_KEY`, `MAX_ITEMS`, `DOCK_KEY`, `SNAP_THRESHOLD`, `PANEL_OPEN_KEY`, `THEME_KEY`, `FONT_SIZE_KEY`
 - `src/storage.js` — `loadItems`, `saveItems` (localStorage, 200-item cap)
 - `src/extract.js` — content-based DOM extraction: `leafElements`, `extractItemId`, `extractTitle`, `parseAmount`, `extractPrice`, `extractDate`, `extractItemData`
 - `src/styles.js` — `injectStyles` (injects a `<style>` tag with all extension CSS)
-- `src/chart.js` — `let chartInstance`, `let chartInstanceUnsold`, `renderChart`, `renderSoldChart`, `renderUnsoldChart`, `rangeLinesPlugin`
+- `src/chart.js` — `let chartInstance`, `let chartInstanceUnsold`, `renderChart`, `renderSoldChart`, `renderUnsoldChart`, `rangeLinesPlugin`, `updateChartFontSizes`
 - `src/dock.js` — `let dockSide`, `nearestEdge`, `setDockSide`
 - `src/checkboxes.js` — `let debounceTimer`, `cardData` WeakMap, `openPanel`, `injectCheckbox`, `clearAll`, `reconcileCheckboxes`, `syncPlotAll`, `buildPlotAllControl`
 - `src/panel.js` — `buildPanel` (DOM construction + all mouse interaction)
@@ -89,6 +91,12 @@ Content scripts in `src/` are loaded sequentially by the manifest. All files sha
 
 **z-index:** Panel is `2147483647` (max int32), toggle is `2147483646`, snap preview is `2147483645` — ensures the panel sits above eBay's sticky navigation.
 
+**Theme & font size:** A dark/light toggle (`#ebay-scatter-theme`) and a font-size number input (`#ebay-scatter-font-size`) live in the header. Theme persists under `THEME_KEY` (default dark); the toggle flips `.theme-light` on both panel and toggle button and destroys/recreates both chart instances so they pick up the new CSS-variable colors. All themeable colors are CSS custom properties declared on `#ebay-scatter-panel` and overridden under `.theme-light`. Font size persists under `FONT_SIZE_KEY` (default 14px, range 10–28).
+
+**Font sizing:** The panel base font-size is set via `panel.style.fontSize` (inline style) so it survives `setDockSide`'s style-clearing. Child CSS font-sizes use `em` units so they scale with the base — never add a hardcoded `px` font-size inside `#ebay-scatter-panel`. Chart.js axes/tooltips do **not** inherit CSS font-size; they need explicit `font: { size }` on tick options and `bodyFont: { size }` on tooltip options. `updateChartFontSizes(size)` in `src/chart.js` patches both live chart instances.
+
+**Header drag guard:** The header `mousedown` handler skips drag logic when `e.target.closest('button, input')` is truthy. Any new interactive element added to the header must be included in this selector, or clicks will trigger drag logic and can pin/reset panel dimensions.
+
 ## Data extraction
 
 Extraction is content-based (resilient to eBay class renames):
@@ -104,6 +112,7 @@ Extraction is content-based (resilient to eBay class renames):
 - Per-item checkboxes are injected into each valid listing card. Checking one saves the item to `localStorage` **immediately** and calls `openPanel()` to open the panel if it is minimized.
 - `#ebay-scatter-plot-all` is inserted directly before `ul.srp-results` (anchored to the stable list container, not the filter bar which eBay re-renders). It has three states via the native `indeterminate` property: unchecked (none), indeterminate (some), checked (all). `syncPlotAll()` reconciles its state after every change.
 - `clearAll()` wipes localStorage, unchecks all checkboxes, clears the chart.
+- **Storage dedup key is `id+type`** — all mutation paths (add, remove, dedup) use composite key `"${id}:${type || 'sold'}"`. If you add a new write path, follow this pattern; id-only dedup silently drops one record when a multi-quantity item appears as both sold and active.
 
 ## Chart
 

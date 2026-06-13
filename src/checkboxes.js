@@ -50,9 +50,9 @@ function injectCheckbox(card, savedItemsMap) {
   // Only pre-check if the stored item has the same type: a sold-listing save
   // must not cause an active listing (same multi-quantity ID) to appear checked.
   const savedItem = savedItemsMap
-    ? savedItemsMap.get(id)
-    : loadItems().find((i) => i.id === id);
-  cb.checked = !!savedItem && (savedItem.type || 'sold') === data.type;
+    ? savedItemsMap.get(`${id}:${data.type}`)
+    : loadItems().find((i) => i.id === id && (i.type || 'sold') === data.type);
+  cb.checked = !!savedItem;
 
   label.appendChild(cb);
   label.appendChild(document.createTextNode(' Plot'));
@@ -68,13 +68,13 @@ function injectCheckbox(card, savedItemsMap) {
     const items = loadItems();
 
     if (cb.checked) {
-      if (!items.some((i) => i.id === data.id)) {
+      if (!items.some((i) => i.id === data.id && (i.type || 'sold') === data.type)) {
         items.push(data);
         saveItems(items);
       }
       openPanel();
     } else {
-      saveItems(items.filter((i) => i.id !== id));
+      saveItems(items.filter((i) => !(i.id === id && (i.type || 'sold') === data.type)));
     }
 
     reconcileCheckboxes();
@@ -127,10 +127,10 @@ function syncPlotAll() {
 // MAX_ITEMS, so a bulk selection can drop the oldest items; without this the
 // dropped items' boxes would stay checked and lie about what's plotted.
 function reconcileCheckboxes() {
-  const itemMap = new Map(loadItems().map((i) => [i.id, i]));
+  const itemMap = new Map(loadItems().map((i) => [`${i.id}:${i.type || 'sold'}`, i]));
   document.querySelectorAll('.ebay-scatter-cb input').forEach((box) => {
-    const saved = itemMap.get(box.dataset.itemId);
-    box.checked = !!saved && (saved.type || 'sold') === (box.dataset.itemType || 'sold');
+    const key = `${box.dataset.itemId}:${box.dataset.itemType || 'sold'}`;
+    box.checked = !!itemMap.get(key);
   });
 }
 
@@ -159,11 +159,8 @@ function buildPlotAllControl(listContainer) {
         .forEach((card) => {
           const data = cardData.get(card);
           if (data) {
-            const idx = items.findIndex((i) => i.id === data.id);
-            if (idx === -1) {
+            if (!items.some((i) => i.id === data.id && (i.type || 'sold') === data.type)) {
               items.push(data);
-            } else if ((items[idx].type || 'sold') !== data.type) {
-              items[idx] = data;
             }
           }
         });
@@ -175,12 +172,12 @@ function buildPlotAllControl(listContainer) {
       syncPlotAll();
     } else {
       // Only remove items visible on this page — items from other pages/types stay.
-      const pageIds = new Set(
+      const pageKeys = new Set(
         Array.from(document.querySelectorAll('.ebay-scatter-cb input')).map(
-          (box) => box.dataset.itemId,
+          (box) => `${box.dataset.itemId}:${box.dataset.itemType || 'sold'}`,
         ),
       );
-      saveItems(loadItems().filter((i) => !pageIds.has(i.id)));
+      saveItems(loadItems().filter((i) => !pageKeys.has(`${i.id}:${i.type || 'sold'}`)));
       document.querySelectorAll('.ebay-scatter-cb input').forEach((box) => {
         box.checked = false;
       });

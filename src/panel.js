@@ -4,7 +4,11 @@ function buildPanel() {
   panel.innerHTML = `
     <header>
       <h2>Price History</h2>
-      <button id="ebay-scatter-close" title="Close">&times;</button>
+      <span class="ebay-scatter-header-actions">
+        <input type="number" id="ebay-scatter-font-size" min="10" max="28" step="1" title="Font size (px)" aria-label="Font size (px)">
+        <button id="ebay-scatter-theme" title="Toggle light/dark" aria-label="Switch to light mode"></button>
+        <button id="ebay-scatter-close" title="Close">&times;</button>
+      </span>
     </header>
     <div class="ebay-scatter-body">
       <div id="ebay-scatter-controls">
@@ -36,6 +40,21 @@ function buildPanel() {
   const preview = document.createElement('div');
   preview.id = 'ebay-scatter-snap-preview';
   document.body.appendChild(preview);
+
+  // Apply stored theme
+  const storedTheme = localStorage.getItem(THEME_KEY) || 'dark';
+  if (storedTheme === 'light') {
+    panel.classList.add('theme-light');
+    toggle.classList.add('theme-light');
+  }
+  const themeBtn = document.getElementById('ebay-scatter-theme');
+  themeBtn.textContent = storedTheme === 'light' ? '☾' : '☉';
+  themeBtn.setAttribute('aria-label', storedTheme === 'light' ? 'Switch to dark mode' : 'Switch to light mode');
+
+  // Apply stored font size as an inline font-size so all em-based children scale.
+  const storedSize = parseInt(localStorage.getItem(FONT_SIZE_KEY), 10) || 14;
+  panel.style.fontSize = storedSize + 'px';
+  document.getElementById('ebay-scatter-font-size').value = storedSize;
 
   // Start minimized — panel opens on first interaction (toggle click or checkbox).
   panel.style.display = 'none';
@@ -78,6 +97,30 @@ function buildPanel() {
   document
     .getElementById('ebay-scatter-clear')
     .addEventListener('click', clearAll);
+
+  themeBtn.addEventListener('click', () => {
+    const isLight = panel.classList.toggle('theme-light');
+    toggle.classList.toggle('theme-light', isLight);
+    themeBtn.textContent = isLight ? '☾' : '☉';
+    themeBtn.setAttribute('aria-label', isLight ? 'Switch to dark mode' : 'Switch to light mode');
+    try { localStorage.setItem(THEME_KEY, isLight ? 'light' : 'dark'); } catch { /* non-fatal */ }
+    if (chartInstance)       { chartInstance.destroy();       chartInstance = null; }
+    if (chartInstanceUnsold) { chartInstanceUnsold.destroy(); chartInstanceUnsold = null; }
+    renderChart(loadItems());
+  });
+
+  const fsInput = document.getElementById('ebay-scatter-font-size');
+  fsInput.addEventListener('input', (e) => {
+    const val = parseInt(e.target.value, 10);
+    if (!isNaN(val) && val >= 10 && val <= 28) {
+      panel.style.fontSize = val + 'px';
+      updateChartFontSizes(val);
+      try { localStorage.setItem(FONT_SIZE_KEY, val); } catch { /* non-fatal */ }
+    }
+  });
+  fsInput.addEventListener('blur', () => {
+    fsInput.value = parseInt(panel.style.fontSize, 10) || 14;
+  });
 
   // ── Resize ──────────────────────────────────────────────────────────────────
   const resizeHandle = document.getElementById('ebay-scatter-resize');
@@ -123,7 +166,7 @@ function buildPanel() {
     dragOffsetY = 0;
 
   header.addEventListener('mousedown', (e) => {
-    if (e.target.id === 'ebay-scatter-close') {
+    if (e.target.closest('button, input')) {
       return;
     }
 

@@ -1,13 +1,42 @@
 let chartInstance = null;
 let chartInstanceUnsold = null;
 
+function getChartFontSize() {
+  const panel = document.getElementById('ebay-scatter-panel');
+  return parseInt(panel ? panel.style.fontSize : '14', 10) || 14;
+}
+
+function getChartColors() {
+  const panel = document.getElementById('ebay-scatter-panel');
+  if (!panel) {
+    return {
+      tick: '#bbb', grid: '#2e2e2e',
+      accent: 'rgba(99,179,237,0.8)', accentSolid: 'rgba(99,179,237,1)',
+      accentLine: 'rgba(99,179,237,0.7)',
+      tooltipBg: 'rgba(20,20,20,0.9)', tooltipText: '#eee',
+    };
+  }
+  const cs = getComputedStyle(panel);
+  const v = (k) => cs.getPropertyValue(k).trim();
+  return {
+    tick:        v('--scatter-tick'),
+    grid:        v('--scatter-grid-line'),
+    accent:      v('--scatter-accent'),
+    accentSolid: v('--scatter-accent-solid'),
+    accentLine:  v('--scatter-accent-line'),
+    tooltipBg:   v('--scatter-tooltip-bg'),
+    tooltipText: v('--scatter-tooltip-text'),
+  };
+}
+
 const rangeLinesPlugin = {
   id: 'rangeLines',
   afterDraw(chart) {
     const meta = chart.getDatasetMeta(0);
     const { ctx } = chart;
+    const { accentLine } = getChartColors();
     ctx.save();
-    ctx.strokeStyle = 'rgba(99,179,237,0.7)';
+    ctx.strokeStyle = accentLine;
     ctx.lineWidth = 2;
     chart.data.datasets[0].data.forEach((pt, i) => {
       if (pt.priceHigh === undefined) { return; }
@@ -74,6 +103,9 @@ function renderSoldChart(items) {
     return;
   }
 
+  const c = getChartColors();
+  const fontSize = getChartFontSize();
+
   chartInstance = new window.Chart(canvas, {
     type: 'scatter',
     data: {
@@ -83,8 +115,8 @@ function renderSoldChart(items) {
           data,
           pointRadius: 5,
           pointHoverRadius: 7,
-          backgroundColor: 'rgba(99,179,237,0.8)',
-          borderColor: 'rgba(99,179,237,1)',
+          backgroundColor: c.accent,
+          borderColor: c.accentSolid,
         },
       ],
     },
@@ -93,8 +125,11 @@ function renderSoldChart(items) {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { labels: { color: '#bbb' } },
+        legend: { display: false },
         tooltip: {
+          backgroundColor: c.tooltipBg,
+          bodyColor: c.tooltipText,
+          bodyFont: { size: fontSize },
           callbacks: {
             label: (ctx) => {
               const { title, date, y, priceHigh } = ctx.raw;
@@ -102,7 +137,7 @@ function renderSoldChart(items) {
                 priceHigh !== undefined
                   ? `$${y.toFixed(2)}–$${priceHigh.toFixed(2)}`
                   : `$${y.toFixed(2)}`;
-              return `${title} | ${date} | ${priceStr}`;
+              return `${priceStr} | ${date} | ${title}`;
             },
           },
         },
@@ -111,19 +146,21 @@ function renderSoldChart(items) {
         x: {
           type: 'linear',
           ticks: {
-            color: '#999',
+            color: c.tick,
+            font: { size: fontSize },
             maxTicksLimit: 6,
             callback: (v) => new Date(v).toISOString().slice(0, 10),
           },
-          grid: { color: '#2e2e2e' },
+          grid: { color: c.grid },
         },
         y: {
           suggestedMax: yMax * 1.025,
           ticks: {
-            color: '#999',
+            color: c.tick,
+            font: { size: fontSize },
             callback: (v) => `$${v.toFixed(0)}`,
           },
-          grid: { color: '#2e2e2e' },
+          grid: { color: c.grid },
         },
       },
     },
@@ -184,6 +221,9 @@ function renderUnsoldChart(items) {
     return;
   }
 
+  const c = getChartColors();
+  const fontSize = getChartFontSize();
+
   chartInstanceUnsold = new window.Chart(canvas, {
     type: 'scatter',
     data: {
@@ -193,8 +233,8 @@ function renderUnsoldChart(items) {
           data,
           pointRadius: radii,
           pointHoverRadius: hoverRadii,
-          backgroundColor: 'rgba(99,179,237,0.8)',
-          borderColor: 'rgba(99,179,237,1)',
+          backgroundColor: c.accent,
+          borderColor: c.accentSolid,
         },
       ],
     },
@@ -203,8 +243,11 @@ function renderUnsoldChart(items) {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { labels: { color: '#bbb' } },
+        legend: { display: false },
         tooltip: {
+          backgroundColor: c.tooltipBg,
+          bodyColor: c.tooltipText,
+          bodyFont: { size: fontSize },
           callbacks: {
             label: (ctx) => {
               const { title, y, priceHigh } = ctx.raw;
@@ -212,7 +255,7 @@ function renderUnsoldChart(items) {
                 priceHigh !== undefined
                   ? `$${y.toFixed(2)}–$${priceHigh.toFixed(2)}`
                   : `$${y.toFixed(2)}`;
-              return `${title} | ${priceStr}`;
+              return `${priceStr} | ${title}`;
             },
           },
         },
@@ -223,18 +266,31 @@ function renderUnsoldChart(items) {
           min: xMin,
           max: xMax,
           ticks: { display: false },
-          grid: { color: '#2e2e2e' },
+          grid: { color: c.grid },
         },
         y: {
           suggestedMax: yMax * 1.025,
           ticks: {
-            color: '#999',
+            color: c.tick,
+            font: { size: fontSize },
             callback: (v) => `$${v.toFixed(0)}`,
           },
-          grid: { color: '#2e2e2e' },
+          grid: { color: c.grid },
         },
       },
     },
     plugins: [rangeLinesPlugin],
   });
+}
+
+function updateChartFontSizes(size) {
+  const font = { size };
+  for (const chart of [chartInstance, chartInstanceUnsold]) {
+    if (!chart) { continue; }
+    const { scales, plugins } = chart.options;
+    if (scales.x?.ticks) { scales.x.ticks.font = font; }
+    if (scales.y?.ticks) { scales.y.ticks.font = font; }
+    if (plugins?.tooltip) { plugins.tooltip.bodyFont = font; }
+    chart.update();
+  }
 }

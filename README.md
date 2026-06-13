@@ -11,7 +11,9 @@ A Firefox extension that adds a price history panel to eBay search pages. Select
 - **"Plot all"** checkbox to select or deselect all valid listings at once
 - **Drag to redock** — drag the panel header or the toggle tab to move the panel to a different edge
 - **Resizable** — drag the panel's free edge to expand or contract it
-- **Persists across page loads** — selected items, dock position, and panel open/closed state are saved in `localStorage`
+- **Dark / light theme** — toggle in the panel header
+- **Adjustable text size** — set the panel font size from the header
+- **Persists across page loads** — selected items, dock position, panel open/closed state, theme, and font size are saved in `localStorage`
 - Handles infinite scroll and pagination automatically
 
 ## Installation
@@ -43,6 +45,8 @@ The extension will remain active until Firefox is closed. Repeat step 4 after re
 
 **Resizing:** Hover over the panel's inner edge until the cursor changes, then drag to resize.
 
+**Theme and text size:** Use the header controls to switch between dark and light mode (☉/☾) and to set the panel's text size. Both preferences are saved and restored on your next visit.
+
 ## Development
 
 No build step is needed to develop. After editing any file in `src/`:
@@ -50,7 +54,7 @@ No build step is needed to develop. After editing any file in `src/`:
 1. Go to `about:debugging#/runtime/this-firefox`
 2. Find the extension and click **Reload**
 
-Run the unit tests with `npm test` (covers extraction, storage, dock geometry, chart math, and checkbox state).
+Run the unit tests with `npm test` (covers extraction, storage, dock geometry, chart math, checkbox state, and panel header wiring).
 
 To package the extension for distribution, run `npm run lint` and `npm run build`.
 
