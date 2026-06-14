@@ -21,7 +21,16 @@
 
   "content_scripts": [
     {
-      "matches": ["*://*.ebay.com/sch/*"],
+      "matches": [
+        "*://*.ebay.com/sch/*",
+        "*://*.ebay.co.uk/sch/*",
+        "*://*.ebay.de/sch/*",
+        "*://*.ebay.ca/sch/*",
+        "*://*.ebay.com.au/sch/*",
+        "*://*.ebay.fr/sch/*",
+        "*://*.ebay.it/sch/*",
+        "*://*.ebay.es/sch/*"
+      ],
       "js": [
         "vendor/chart.js/chart.umd.min.js",
         "src/constants.js",

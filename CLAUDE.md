@@ -16,7 +16,7 @@ The extension's own source (`src/*.js`) is loaded as-is — no bundler or transp
 
 Load the extension in Firefox for development:
 1. `about:debugging#/runtime/this-firefox` → Load Temporary Add-on → select `manifest.json`
-2. Navigate to any eBay search page (`*://*.ebay.com/sch/*`)
+2. Navigate to any eBay search page (e.g. `*.ebay.com/sch/*`, `*.ebay.co.uk/sch/*`, etc.)
 3. After editing any `src/*.js` file, click "Reload" on the extension card
 
 To update Chart.js: `npm update chart.js` then `npm run vendor` (re-copies into `vendor/`).
@@ -49,7 +49,7 @@ The suite locks down the core logic that must stay stable regardless of eBay's m
 - `test/panel.test.mjs` — `buildPanel` DOM/event wiring, font-size input, and dark/light theme toggle
 - `test/helpers/load.mjs` — `loadModules(files, { url, setup })` loads any `src/` files into one shared jsdom-backed `node:vm` context (mirroring the content-script scope), so the **source stays free of any test-only exports** and tests run the exact shipped code; `loadExtract` is the extract-only shorthand
 - `test/helpers/chart-stub.mjs` — `makeChartStub()`, a fake Chart.js constructor that records the config it was built with
-- `test/fixtures/*.html` — real listing cards (sold-search **and** active-search), trimmed and self-contained (no external assets), with expected values asserted against the real data
+- `test/fixtures/*.html` — real listing cards (sold-search **and** active-search), trimmed and self-contained (no external assets), with expected values asserted against the real data. International pages (`international-pages/LOCALE/TYPE/`) are minified single-line HTML — use Perl to extract cards: `perl -0777 -ne 'if (/(<li\b[^>]*data-listingid=ID[^>]*>.*?<\/li>)/s) { $c=$1; $c=~s/<img\b[^>]*>/ /g; print $c }' page.htm`. CSS-class-only strikethrough spans need `style="text-decoration: line-through"` added inline (jsdom ignores class-based rules).
 
 Key conventions:
 - **The `test` script pins `TZ=Australia/Sydney`** (a positive UTC offset) on purpose: `extractDate` must store the displayed calendar date, and the original H1 bug (UTC round-trip via `toISOString()`) only shows up at a positive offset. Running there means any reintroduction fails the date tests even on US machines.
@@ -61,7 +61,7 @@ Key conventions:
 
 ## Architecture
 
-Content scripts in `src/` are loaded sequentially by the manifest. All files share the same content script sandbox scope — no IIFE, no ES modules. Top-level `const`/`let`/`function` declarations in one file are accessible to all subsequently loaded files. The content scripts are registered only for eBay search pages (`*://*.ebay.com/sch/*` in the manifest), and `src/init.js` runs unconditionally on all matching pages (no URL guard). Chart.js is loaded first via the manifest (`vendor/chart.js/chart.umd.min.js`) so `window.Chart` is available synchronously — no CDN injection (eBay's CSP blocks it).
+Content scripts in `src/` are loaded sequentially by the manifest. All files share the same content script sandbox scope — no IIFE, no ES modules. Top-level `const`/`let`/`function` declarations in one file are accessible to all subsequently loaded files. The content scripts are registered for eBay search pages across all supported domains (`ebay.com`, `ebay.co.uk`, `ebay.de`, `ebay.ca`, `ebay.com.au`, `ebay.fr`, `ebay.it`, `ebay.es` — 8 patterns in the manifest), and `src/init.js` runs unconditionally on all matching pages (no URL guard). Chart.js is loaded first via the manifest (`vendor/chart.js/chart.umd.min.js`) so `window.Chart` is available synchronously — no CDN injection (eBay's CSP blocks it).
 
 **Source files (load order matches manifest):**
 - `src/constants.js` — eight `const` values: `RESULTS_SEL`, `STORAGE_KEY`, `MAX_ITEMS`, `DOCK_KEY`, `SNAP_THRESHOLD`, `PANEL_OPEN_KEY`, `THEME_KEY`, `FONT_SIZE_KEY`
@@ -101,11 +101,11 @@ Content scripts in `src/` are loaded sequentially by the manifest. All files sha
 
 Extraction is content-based (resilient to eBay class renames):
 - **Item ID:** `data-listingid` attribute, fallback to `/itm/<id>` URL parsing
-- **Date:** leaf element (`span`/`div`) whose text starts with `"Sold "` — parses the date substring. Returns `null` for active (unsold) listings.
-- **Price:** leaf element whose full text matches `$X.XX` — checks parent chain for `line-through` (best-offer items are skipped); shipping added if a nearby leaf contains "delivery"/"shipping" and a `$` amount, or a `+$X.XX` leaf (split-span delivery pattern on active listings). Returns `{ price, priceHigh? }` or `null`. `priceHigh` is set when a second non-struck `$X.XX` span exists in the same parent element (range listings, e.g. `$8.99 to $18.99`).
+- **Date:** leaf element (`span`/`div`) matching `SOLD_RE` (`/^(?:Sold|Verkauft|Vendu(?:\s+le)?|Venduto|Venduti|Vendido|Vendidos)\b/i`) — parses the date substring using `MONTH_MAP` (EN/FR/IT/ES/DE month names). Handles day-first format ("14 Jun 2026", used by UK/AU/CA/DE/FR/IT/ES) and month-first ("Jun 14, 2026", US/MX EN) via pure string manipulation — no `new Date()` conversion (immune to UTC/TZ regression). Returns `null` for active (unsold) listings.
+- **Price:** leaf element whose full text matches `PRICE_RE` (`$X.XX`, `£X.XX`, `EUR X,XX` prefix, or `X,XX EUR` suffix) — checks parent chain for `line-through` (best-offer items are skipped); shipping added if a leaf **after the price element in DOM order** contains a multi-language shipping keyword (`delivery`/`shipping`/`Versand`/`Lieferung`/`livraison`/`consegna`/`spedizione`/`envío`/`expédition`) and a currency amount, or a `+<amount>` leaf in any supported currency (split-span delivery pattern). Scanning only post-price leaves prevents false positives when product titles contain free-shipping phrases (e.g. Italian "SPEDIZIONE GRATUITA", French "Livraison gratuite") — title spans always precede the price in eBay card DOM. `parseAmount` auto-detects EUR comma-decimal (`X,XX` with exactly 2 digits before space/end) vs. period-decimal; US thousands commas (`$1,234.56`) always have 3+ digits after the comma and are never misread. Returns `{ price, priceHigh? }` or `null`. `priceHigh` is set when a second non-struck price span exists in the same parent element (range listings, e.g. `$8.99 to $18.99`). Mixed currencies (foreign sellers) appear on every eBay page and are plotted at face value — no currency conversion.
 - **Title:** `[role="heading"][aria-level="3"]` with `.clipped`/`aria-hidden` nodes stripped; falls back to card `aria-label`
 
-`extractItemData` returns `null` for best-offer items or items with unparseable prices. Items with a `"Sold "` date get `type: 'sold'`; items without get `type: 'unsold'` and today's local date as a fallback (so they still appear in the chart). Items in localStorage from before the `type` field was added are treated as `'sold'`. `injectCheckbox` only injects a checkbox if `extractItemData` succeeds. Non-listing tiles (ads/promos) are marked `data-scatter-injected="skip"` and never re-checked; a listing card that fails extraction is left *unmarked* so a later observer pass retries it (handles eBay's lazy rendering). Successfully extracted data is cached in a `WeakMap` (`cardData`) so the checkbox handler and "Plot all" don't re-extract.
+`extractItemData` returns `null` for best-offer items or items with unparseable prices. Items with a sold-prefix date get `type: 'sold'`; items without get `type: 'unsold'` and today's local date as a fallback (so they still appear in the chart). Items in localStorage from before the `type` field was added are treated as `'sold'`. `injectCheckbox` only injects a checkbox if `extractItemData` succeeds. Non-listing tiles (ads/promos) are marked `data-scatter-injected="skip"` and never re-checked; a listing card that fails extraction is left *unmarked* so a later observer pass retries it (handles eBay's lazy rendering). Successfully extracted data is cached in a `WeakMap` (`cardData`) so the checkbox handler and "Plot all" don't re-extract.
 
 ## Checkboxes & "Plot all"
 

@@ -8,6 +8,17 @@ import {
   ACTIVE_RANGE_DELIVERY,
   ACTIVE_RANGE,
   ACTIVE_SPLIT_DELIVERY,
+  AU_SOLD,
+  UK_SOLD,
+  CA_EN_SOLD,
+  CA_FR_SOLD,
+  FR_SOLD,
+  IT_GIU_SOLD,
+  IT_MAGG_SOLD,
+  DE_SOLD,
+  ES_SOLD,
+  MX_EN_SOLD,
+  MX_ES_SOLD,
 } from './fixtures.mjs';
 
 const x = loadExtract();
@@ -168,12 +179,12 @@ test('extractPrice does not read a struck original price as the range high', () 
   assert.equal(d.priceHigh, undefined);
 });
 
-test('extractPrice: a single-leaf "US $" is not matched (documents M1)', () => {
-  // documents-behavior — the captured page never emits "US $107.94" in one leaf;
-  // if it did, the current regex would skip it. This pins the assumption rather
-  // than asserting it is desirable.
-  assert.equal(extractPrice(card('<span>US $107.94</span>')), null);
-  assert.equal(extractPrice(card('<span>$107.94</span>')).price, 107.94);
+test('extractPrice reads prefixed dollar amounts (C $, AU $, MXN $, US $)', () => {
+  // invariant — international dollar prefixes are now supported.
+  assert.ok(Math.abs(extractPrice(card('<span>C $22.57</span>')).price - 22.57) < 0.005);
+  assert.ok(Math.abs(extractPrice(card('<span>AU $33.46</span>')).price - 33.46) < 0.005);
+  assert.ok(Math.abs(extractPrice(card('<span>MXN $1,464.45</span>')).price - 1464.45) < 0.005);
+  assert.ok(Math.abs(extractPrice(card('<span>US $107.94</span>')).price - 107.94) < 0.005);
 });
 
 // ── extractItemId ────────────────────────────────────────────────────────────
@@ -287,6 +298,168 @@ test("extractItemData falls back to 'Unknown item' with no title", () => {
   li.setAttribute('data-listingid', '555');
 
   assert.equal(extractItemData(li).title, 'Unknown item');
+});
+
+// ── International: parseAmount — space/NBSP thousands ────────────────────────
+
+test('parseAmount handles space and NBSP thousands separators', () => {
+  // invariant
+  assert.equal(parseAmount('350 000,00 EUR'), 350000);       // space sep, comma decimal (FR large)
+  assert.equal(parseAmount('MXN $6 460.80'), 6460.80); // NBSP sep, period decimal (MX ES)
+});
+
+// ── International: parseAmount EUR comma-decimal ─────────────────────────────
+
+test('parseAmount handles EUR comma-decimal format', () => {
+  // invariant
+  assert.equal(parseAmount('EUR 12,40'), 12.40);
+  assert.equal(parseAmount('29,01 EUR'), 29.01);
+  assert.equal(parseAmount('EUR 1.234,56'), 1234.56);      // EUR with thousands period
+  assert.equal(parseAmount('+EUR 2,95 Lieferung'), 2.95);  // DE shipping with keyword
+  assert.equal(parseAmount('+ 8,50 EUR de envío'), 8.50);  // ES shipping
+});
+
+// ── International: extractDate day-first and non-English months ───────────────
+
+test('extractDate handles day-first format (UK, AU, CA EN)', () => {
+  // invariant
+  assert.equal(extractDate(card('<span>Sold  14 Jun 2026</span>')), '2026-06-14');
+});
+
+test('extractDate handles non-English sold prefixes and month names', () => {
+  // invariant
+  assert.equal(extractDate(card('<span>Verkauft  13. Jun 2026</span>')), '2026-06-13');
+  assert.equal(extractDate(card('<span>Vendu le  8 mai 2026</span>')), '2026-05-08');
+  assert.equal(extractDate(card('<span>Vendu  13 juin 2026</span>')), '2026-06-13');
+  assert.equal(extractDate(card('<span>Venduti  11 giu. 2026</span>')), '2026-06-11');
+  assert.equal(extractDate(card('<span>Venduti  10 magg. 2026</span>')), '2026-05-10');
+  assert.equal(extractDate(card('<span>Vendidos  14 jun 2026</span>')), '2026-06-14');
+  assert.equal(extractDate(card('<span>Vendido  11 jun 2026</span>')), '2026-06-11');
+});
+
+// ── International: extractPrice £ and EUR formats ────────────────────────────
+
+test('extractPrice reads £ prices (UK)', () => {
+  // invariant
+  assert.ok(Math.abs(extractPrice(card('<span>£11.00</span>')).price - 11.00) < 0.005);
+});
+
+test('extractPrice reads EUR prefix prices (DE, IT)', () => {
+  // invariant
+  assert.ok(Math.abs(extractPrice(card('<span>EUR 12,40</span>')).price - 12.40) < 0.005);
+});
+
+test('extractPrice reads EUR suffix prices (FR, ES)', () => {
+  // invariant
+  assert.ok(Math.abs(extractPrice(card('<span>29,01 EUR</span>')).price - 29.01) < 0.005);
+});
+
+test('extractPrice reads $C prices (Canada French)', () => {
+  // invariant
+  assert.ok(Math.abs(extractPrice(card('<span>22,57 $C</span>')).price - 22.57) < 0.005);
+});
+
+test('extractPrice adds EUR shipping to price (DE/IT pattern)', () => {
+  // invariant
+  const d = extractPrice(card('<span>EUR 7,75</span><span>+EUR 2,95 Lieferung</span>'));
+  assert.ok(Math.abs(d.price - 10.70) < 0.005, `got ${d.price}`);
+});
+
+test('extractPrice adds EUR shipping to price (FR/ES pattern)', () => {
+  // invariant
+  const d = extractPrice(card('<span>29,01 EUR</span><span>+13,04 EUR pour la livraison</span>'));
+  assert.ok(Math.abs(d.price - 42.05) < 0.005, `got ${d.price}`);
+});
+
+// ── markup-canary: international sold listings ────────────────────────────────
+
+test('markup-canary: AU_SOLD — AU$ day-first date, split delivery', () => {
+  const d = extractItemData(parse(AU_SOLD));
+  assert.equal(d.id, '316831955834');
+  assert.equal(d.date, '2026-06-14');
+  assert.equal(d.type, 'sold');
+  assert.ok(Math.abs(d.price - 46.00) < 0.005, `got ${d.price}`);
+});
+
+test('markup-canary: UK_SOLD — £ price, split +£1.55 delivery span', () => {
+  const d = extractItemData(parse(UK_SOLD));
+  assert.equal(d.id, '316831955834');
+  assert.equal(d.date, '2026-06-14');
+  assert.equal(d.type, 'sold');
+  assert.ok(Math.abs(d.price - 17.54) < 0.005, `got ${d.price}`);
+});
+
+test('markup-canary: CA_EN_SOLD — C$ prefix price, day-first date', () => {
+  const d = extractItemData(parse(CA_EN_SOLD));
+  assert.equal(d.id, '316831955834');
+  assert.equal(d.date, '2026-06-14');
+  assert.equal(d.type, 'sold');
+  assert.ok(Math.abs(d.price - 41.21) < 0.005, `got ${d.price}`);
+});
+
+test('markup-canary: CA_FR_SOLD — $C suffix price, Vendu french date, expédition shipping', () => {
+  const d = extractItemData(parse(CA_FR_SOLD));
+  assert.equal(d.id, '146893875871');
+  assert.equal(d.date, '2026-06-13');
+  assert.equal(d.type, 'sold');
+  assert.ok(Math.abs(d.price - 42.19) < 0.005, `got ${d.price}`);
+});
+
+test('markup-canary: FR_SOLD — EUR suffix, Vendu le + mai, free shipping', () => {
+  const d = extractItemData(parse(FR_SOLD));
+  assert.equal(d.id, '295875474042');
+  assert.equal(d.date, '2026-05-08');
+  assert.equal(d.type, 'sold');
+  assert.ok(Math.abs(d.price - 6.00) < 0.005, `got ${d.price}`);
+});
+
+test('markup-canary: IT_GIU_SOLD — EUR prefix, Venduti + giu., "SPEDIZIONE GRATUITA" in title ignored', () => {
+  const d = extractItemData(parse(IT_GIU_SOLD));
+  assert.equal(d.id, '176502963636');
+  assert.equal(d.date, '2026-06-11');
+  assert.equal(d.type, 'sold');
+  assert.ok(Math.abs(d.price - 27.51) < 0.005, `got ${d.price}`);
+});
+
+test('markup-canary: IT_MAGG_SOLD — Venduti + magg. (maggio fix), EUR prefix', () => {
+  const d = extractItemData(parse(IT_MAGG_SOLD));
+  assert.equal(d.id, '186698751424');
+  assert.equal(d.date, '2026-05-31');
+  assert.equal(d.type, 'sold');
+  assert.ok(Math.abs(d.price - 27.92) < 0.005, `got ${d.price}`);
+});
+
+test('markup-canary: DE_SOLD — EUR prefix, Verkauft + period-day, Lieferung shipping', () => {
+  const d = extractItemData(parse(DE_SOLD));
+  assert.equal(d.id, '176380896866');
+  assert.equal(d.date, '2026-06-13');
+  assert.equal(d.type, 'sold');
+  assert.ok(Math.abs(d.price - 10.70) < 0.005, `got ${d.price}`);
+});
+
+test('markup-canary: ES_SOLD — EUR suffix, Vendidos, envío shipping', () => {
+  const d = extractItemData(parse(ES_SOLD));
+  assert.equal(d.id, '188471718932');
+  assert.equal(d.date, '2026-06-14');
+  assert.equal(d.type, 'sold');
+  assert.ok(Math.abs(d.price - 39.76) < 0.005, `got ${d.price}`);
+});
+
+test('markup-canary: MX_EN_SOLD — MXN$ prefix, month-first date', () => {
+  const d = extractItemData(parse(MX_EN_SOLD));
+  assert.equal(d.id, '188285590204');
+  assert.equal(d.date, '2026-06-14');
+  assert.equal(d.type, 'sold');
+  assert.ok(Math.abs(d.price - 1219.28) < 0.005, `got ${d.price}`);
+});
+
+test('markup-canary: MX_ES_SOLD — MXN$ + NBSP thousands, Vendido, envío shipping', () => {
+  const d = extractItemData(parse(MX_ES_SOLD));
+  assert.equal(d.id, '147349367091');
+  assert.equal(d.date, '2026-06-11');
+  assert.equal(d.type, 'sold');
+  assert.ok(Math.abs(d.price - 3849.26) < 0.005, `got ${d.price}`);
+  assert.equal(d.priceHigh, undefined);
 });
 
 // ── markup-canary: real captured eBay cards ──────────────────────────────────
