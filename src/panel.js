@@ -43,13 +43,18 @@ function buildPanel() {
 
   // Apply stored theme
   const storedTheme = localStorage.getItem(THEME_KEY) || 'dark';
+
   if (storedTheme === 'light') {
     panel.classList.add('theme-light');
     toggle.classList.add('theme-light');
   }
+
   const themeBtn = document.getElementById('ebay-scatter-theme');
   themeBtn.textContent = storedTheme === 'light' ? '☾' : '☉';
-  themeBtn.setAttribute('aria-label', storedTheme === 'light' ? 'Switch to dark mode' : 'Switch to light mode');
+  themeBtn.setAttribute(
+    'aria-label',
+    storedTheme === 'light' ? 'Switch to dark mode' : 'Switch to light mode',
+  );
 
   // Apply stored font size as an inline font-size so all em-based children scale.
   const storedSize = parseInt(localStorage.getItem(FONT_SIZE_KEY), 10) || 14;
@@ -83,39 +88,74 @@ function buildPanel() {
     .addEventListener('click', () => {
       panel.style.display = 'none';
       toggle.style.display = 'block';
-      try { localStorage.removeItem(PANEL_OPEN_KEY); } catch { /* non-fatal */ }
+
+      try {
+        localStorage.removeItem(PANEL_OPEN_KEY);
+      } catch {
+        /* non-fatal */
+      }
     });
   toggle.addEventListener('click', () => {
     if (toggleDragMoved) {
       toggleDragMoved = false;
       return;
     }
+
     panel.style.display = 'flex';
     toggle.style.display = 'none';
-    try { localStorage.setItem(PANEL_OPEN_KEY, '1'); } catch { /* non-fatal */ }
+
+    try {
+      localStorage.setItem(PANEL_OPEN_KEY, '1');
+    } catch {
+      /* non-fatal */
+    }
   });
   document
     .getElementById('ebay-scatter-clear')
     .addEventListener('click', clearAll);
 
   themeBtn.addEventListener('click', () => {
+
     const isLight = panel.classList.toggle('theme-light');
     toggle.classList.toggle('theme-light', isLight);
     themeBtn.textContent = isLight ? '☾' : '☉';
-    themeBtn.setAttribute('aria-label', isLight ? 'Switch to dark mode' : 'Switch to light mode');
-    try { localStorage.setItem(THEME_KEY, isLight ? 'light' : 'dark'); } catch { /* non-fatal */ }
-    if (chartInstance)       { chartInstance.destroy();       chartInstance = null; }
-    if (chartInstanceUnsold) { chartInstanceUnsold.destroy(); chartInstanceUnsold = null; }
+    themeBtn.setAttribute(
+      'aria-label',
+      isLight ? 'Switch to dark mode' : 'Switch to light mode',
+    );
+
+    try {
+      localStorage.setItem(THEME_KEY, isLight ? 'light' : 'dark');
+    } catch {
+      /* non-fatal */
+    }
+
+    if (chartInstance) {
+      chartInstance.destroy();
+      chartInstance = null;
+    }
+
+    if (chartInstanceUnsold) {
+      chartInstanceUnsold.destroy();
+      chartInstanceUnsold = null;
+    }
+
     renderChart(loadItems());
   });
 
   const fsInput = document.getElementById('ebay-scatter-font-size');
   fsInput.addEventListener('input', (e) => {
     const val = parseInt(e.target.value, 10);
+
     if (!isNaN(val) && val >= 10 && val <= 28) {
       panel.style.fontSize = val + 'px';
       updateChartFontSizes(val);
-      try { localStorage.setItem(FONT_SIZE_KEY, val); } catch { /* non-fatal */ }
+
+      try {
+        localStorage.setItem(FONT_SIZE_KEY, val);
+      } catch {
+        /* non-fatal */
+      }
     }
   });
   fsInput.addEventListener('blur', () => {
@@ -135,6 +175,7 @@ function buildPanel() {
     resizeStartPos = horiz ? e.clientX : e.clientY;
     resizeStartDim = horiz ? rect.width : rect.height;
     resizeHandle.classList.add('resizing');
+
     e.preventDefault();
     e.stopPropagation();
   });
@@ -155,6 +196,7 @@ function buildPanel() {
     toggleDragOffY = e.clientY - rect.top;
     togglePinLeft = rect.left;
     togglePinTop = rect.top;
+
     e.preventDefault();
   });
 
@@ -188,6 +230,7 @@ function buildPanel() {
     );
     header.classList.add('dragging');
     panel.classList.add('dragging');
+
     e.preventDefault();
   });
 
@@ -210,10 +253,13 @@ function buildPanel() {
         preview.style.display = 'none';
         setDockSide(dockSide);
       }
+
       return;
     }
+
     if (isResizing) {
       let newDim;
+
       switch (dockSide) {
         case 'right': {
           newDim = resizeStartDim + (resizeStartPos - e.clientX);
@@ -250,6 +296,7 @@ function buildPanel() {
       if (chartInstance) {
         chartInstance.resize();
       }
+
       if (chartInstanceUnsold) {
         chartInstanceUnsold.resize();
       }
@@ -265,6 +312,7 @@ function buildPanel() {
         );
         toggleDragMoved = true;
       }
+
       toggle.style.left = e.clientX - toggleDragOffX + 'px';
       toggle.style.top = e.clientY - toggleDragOffY + 'px';
       showSnapPreview(e);
@@ -283,7 +331,9 @@ function buildPanel() {
     } else if (isToggleDragging) {
       isToggleDragging = false;
       preview.style.display = 'none';
-      setDockSide(toggleDragMoved ? nearestEdge(e.clientX, e.clientY) : dockSide);
+      setDockSide(
+        toggleDragMoved ? nearestEdge(e.clientX, e.clientY) : dockSide,
+      );
       // toggle.style.display stays "block" — panel remains closed
     } else if (isDragging) {
       isDragging = false;

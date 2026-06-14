@@ -11,6 +11,9 @@ function saveItems(items) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items.slice(-MAX_ITEMS)));
   } catch {
     const status = document.getElementById('ebay-scatter-status');
-    if (status) { status.textContent = 'Could not save — storage full or blocked'; }
+
+    if (status) {
+      status.textContent = 'Could not save — storage full or blocked';
+    }
   }
 }

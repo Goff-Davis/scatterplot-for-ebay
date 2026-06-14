@@ -47,7 +47,10 @@ export function loadModules(
   }
 
   for (const f of files) {
-    const code = readFileSync(new URL(`../../src/${f}`, import.meta.url), 'utf8');
+    const code = readFileSync(
+      new URL(`../../src/${f}`, import.meta.url),
+      'utf8',
+    );
     vm.runInContext(code, sandbox);
   }
 

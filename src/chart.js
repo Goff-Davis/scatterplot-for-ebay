@@ -3,28 +3,35 @@ let chartInstanceUnsold = null;
 
 function getChartFontSize() {
   const panel = document.getElementById('ebay-scatter-panel');
+
   return parseInt(panel ? panel.style.fontSize : '14', 10) || 14;
 }
 
 function getChartColors() {
   const panel = document.getElementById('ebay-scatter-panel');
+
   if (!panel) {
     return {
-      tick: '#bbb', grid: '#2e2e2e',
-      accent: 'rgba(99,179,237,0.8)', accentSolid: 'rgba(99,179,237,1)',
+      tick: '#bbb',
+      grid: '#2e2e2e',
+      accent: 'rgba(99,179,237,0.8)',
+      accentSolid: 'rgba(99,179,237,1)',
       accentLine: 'rgba(99,179,237,0.7)',
-      tooltipBg: 'rgba(20,20,20,0.9)', tooltipText: '#eee',
+      tooltipBg: 'rgba(20,20,20,0.9)',
+      tooltipText: '#eee',
     };
   }
+
   const cs = getComputedStyle(panel);
   const v = (k) => cs.getPropertyValue(k).trim();
+
   return {
-    tick:        v('--scatter-tick'),
-    grid:        v('--scatter-grid-line'),
-    accent:      v('--scatter-accent'),
+    tick: v('--scatter-tick'),
+    grid: v('--scatter-grid-line'),
+    accent: v('--scatter-accent'),
     accentSolid: v('--scatter-accent-solid'),
-    accentLine:  v('--scatter-accent-line'),
-    tooltipBg:   v('--scatter-tooltip-bg'),
+    accentLine: v('--scatter-accent-line'),
+    tooltipBg: v('--scatter-tooltip-bg'),
     tooltipText: v('--scatter-tooltip-text'),
   };
 }
@@ -39,7 +46,10 @@ const rangeLinesPlugin = {
     ctx.strokeStyle = accentLine;
     ctx.lineWidth = 2;
     chart.data.datasets[0].data.forEach((pt, i) => {
-      if (pt.priceHigh === undefined) { return; }
+      if (pt.priceHigh === undefined) {
+        return;
+      }
+
       const { x } = meta.data[i];
       ctx.beginPath();
       ctx.moveTo(x, chart.scales.y.getPixelForValue(pt.y));
@@ -75,7 +85,9 @@ function renderSoldChart(items) {
       chartInstance.destroy();
       chartInstance = null;
     }
+
     wrap.classList.remove('visible');
+
     return;
   }
 
@@ -100,6 +112,7 @@ function renderSoldChart(items) {
     chartInstance.data.datasets[0].data = data;
     chartInstance.options.scales.y.suggestedMax = yMax * 1.025;
     chartInstance.update();
+
     return;
   }
 
@@ -137,6 +150,7 @@ function renderSoldChart(items) {
                 priceHigh !== undefined
                   ? `$${y.toFixed(2)}–$${priceHigh.toFixed(2)}`
                   : `$${y.toFixed(2)}`;
+
               return `${priceStr} | ${date} | ${title}`;
             },
           },
@@ -177,7 +191,9 @@ function renderUnsoldChart(items) {
       chartInstanceUnsold.destroy();
       chartInstanceUnsold = null;
     }
+
     wrap.classList.remove('visible');
+
     return;
   }
 
@@ -218,6 +234,7 @@ function renderUnsoldChart(items) {
     chartInstanceUnsold.options.scales.x.max = xMax;
     chartInstanceUnsold.options.scales.y.suggestedMax = yMax * 1.025;
     chartInstanceUnsold.update();
+
     return;
   }
 
@@ -255,6 +272,7 @@ function renderUnsoldChart(items) {
                 priceHigh !== undefined
                   ? `$${y.toFixed(2)}–$${priceHigh.toFixed(2)}`
                   : `$${y.toFixed(2)}`;
+
               return `${priceStr} | ${title}`;
             },
           },
@@ -285,12 +303,26 @@ function renderUnsoldChart(items) {
 
 function updateChartFontSizes(size) {
   const font = { size };
+
   for (const chart of [chartInstance, chartInstanceUnsold]) {
-    if (!chart) { continue; }
+    if (!chart) {
+      continue;
+    }
+
     const { scales, plugins } = chart.options;
-    if (scales.x?.ticks) { scales.x.ticks.font = font; }
-    if (scales.y?.ticks) { scales.y.ticks.font = font; }
-    if (plugins?.tooltip) { plugins.tooltip.bodyFont = font; }
+
+    if (scales.x?.ticks) {
+      scales.x.ticks.font = font;
+    }
+
+    if (scales.y?.ticks) {
+      scales.y.ticks.font = font;
+    }
+
+    if (plugins?.tooltip) {
+      plugins.tooltip.bodyFont = font;
+    }
+
     chart.update();
   }
 }

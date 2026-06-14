@@ -8,12 +8,15 @@ if (localStorage.getItem(PANEL_OPEN_KEY) && loadItems().length > 0) {
 }
 
 const container = document.querySelector(RESULTS_SEL);
+
 if (!container) {
   document.getElementById('ebay-scatter-status').textContent =
     'Could not find listings — eBay may have changed its layout';
   console.warn('[ebay-scatter] Results container not found');
 } else {
-  const savedItemsMap = new Map(loadItems().map((i) => [`${i.id}:${i.type || 'sold'}`, i]));
+  const savedItemsMap = new Map(
+    loadItems().map((i) => [`${i.id}:${i.type || 'sold'}`, i]),
+  );
   container
     .querySelectorAll(':scope > li')
     .forEach((card) => injectCheckbox(card, savedItemsMap));

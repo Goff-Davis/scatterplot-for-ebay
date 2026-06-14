@@ -12,8 +12,14 @@ import { makeChartStub } from './helpers/chart-stub.mjs';
 // regression back to the non-working custom-property approach.
 
 const ALL_FILES = [
-  'constants.js', 'storage.js', 'extract.js', 'chart.js',
-  'dock.js', 'checkboxes.js', 'styles.js', 'panel.js',
+  'constants.js',
+  'storage.js',
+  'extract.js',
+  'chart.js',
+  'dock.js',
+  'checkboxes.js',
+  'styles.js',
+  'panel.js',
 ];
 
 const fresh = () => {
@@ -27,6 +33,7 @@ const fresh = () => {
       sb.getComputedStyle = sb.window.getComputedStyle.bind(sb.window);
     },
   });
+
   return { ...s, Chart };
 };
 
@@ -34,6 +41,7 @@ test('buildPanel: default font-size is 14px', () => {
   const s = fresh();
   s.buildPanel();
   const panel = s.document.getElementById('ebay-scatter-panel');
+
   assert.equal(panel.style.fontSize, '14px');
 });
 
@@ -42,7 +50,6 @@ test('font-size input: changing value updates panel inline font-size', () => {
   s.buildPanel();
   const panel = s.document.getElementById('ebay-scatter-panel');
   const input = s.document.getElementById('ebay-scatter-font-size');
-
   input.value = '20';
   input.dispatchEvent(new s.window.Event('input', { bubbles: true }));
 
@@ -53,7 +60,6 @@ test('font-size input: value persists to localStorage', () => {
   const s = fresh();
   s.buildPanel();
   const input = s.document.getElementById('ebay-scatter-font-size');
-
   input.value = '18';
   input.dispatchEvent(new s.window.Event('input', { bubbles: true }));
 
@@ -65,7 +71,6 @@ test('font-size input: out-of-range value is ignored', () => {
   s.buildPanel();
   const panel = s.document.getElementById('ebay-scatter-panel');
   const input = s.document.getElementById('ebay-scatter-font-size');
-
   input.value = '50';
   input.dispatchEvent(new s.window.Event('input', { bubbles: true }));
 
@@ -77,6 +82,7 @@ test('font-size input: stored value is restored on buildPanel', () => {
   s.localStorage.setItem('ebay_scatterplot_fontsize', '22');
   s.buildPanel();
   const panel = s.document.getElementById('ebay-scatter-panel');
+
   assert.equal(panel.style.fontSize, '22px');
 });
 
@@ -91,7 +97,8 @@ test('buildPanel: default theme is dark (no theme-light class, ☉ glyph)', () =
   const s = fresh();
   s.buildPanel();
   const panel = s.document.getElementById('ebay-scatter-panel');
-  const btn   = s.document.getElementById('ebay-scatter-theme');
+  const btn = s.document.getElementById('ebay-scatter-theme');
+
   assert.equal(panel.classList.contains('theme-light'), false);
   assert.equal(btn.textContent, '☉');
 });
@@ -100,10 +107,11 @@ test('buildPanel: stored light theme restores theme-light class and ☾ glyph', 
   const s = fresh();
   s.localStorage.setItem('ebay_scatterplot_theme', 'light');
   s.buildPanel();
-  const panel   = s.document.getElementById('ebay-scatter-panel');
-  const toggle  = s.document.getElementById('ebay-scatter-toggle');
-  const btn     = s.document.getElementById('ebay-scatter-theme');
-  assert.equal(panel.classList.contains('theme-light'),  true);
+  const panel = s.document.getElementById('ebay-scatter-panel');
+  const toggle = s.document.getElementById('ebay-scatter-toggle');
+  const btn = s.document.getElementById('ebay-scatter-theme');
+
+  assert.equal(panel.classList.contains('theme-light'), true);
   assert.equal(toggle.classList.contains('theme-light'), true);
   assert.equal(btn.textContent, '☾');
 });
@@ -111,13 +119,13 @@ test('buildPanel: stored light theme restores theme-light class and ☾ glyph', 
 test('theme toggle: dark → light adds class on panel + toggle, persists "light"', () => {
   const s = fresh();
   s.buildPanel();
-  const panel  = s.document.getElementById('ebay-scatter-panel');
+  const panel = s.document.getElementById('ebay-scatter-panel');
   const toggle = s.document.getElementById('ebay-scatter-toggle');
-  const btn    = s.document.getElementById('ebay-scatter-theme');
+  const btn = s.document.getElementById('ebay-scatter-theme');
 
   btn.dispatchEvent(new s.window.MouseEvent('click', { bubbles: true }));
 
-  assert.equal(panel.classList.contains('theme-light'),  true);
+  assert.equal(panel.classList.contains('theme-light'), true);
   assert.equal(toggle.classList.contains('theme-light'), true);
   assert.equal(btn.textContent, '☾');
   assert.equal(s.localStorage.getItem('ebay_scatterplot_theme'), 'light');
@@ -127,13 +135,13 @@ test('theme toggle: light → dark removes class on panel + toggle, persists "da
   const s = fresh();
   s.localStorage.setItem('ebay_scatterplot_theme', 'light');
   s.buildPanel();
-  const panel  = s.document.getElementById('ebay-scatter-panel');
+  const panel = s.document.getElementById('ebay-scatter-panel');
   const toggle = s.document.getElementById('ebay-scatter-toggle');
-  const btn    = s.document.getElementById('ebay-scatter-theme');
+  const btn = s.document.getElementById('ebay-scatter-theme');
 
   btn.dispatchEvent(new s.window.MouseEvent('click', { bubbles: true }));
 
-  assert.equal(panel.classList.contains('theme-light'),  false);
+  assert.equal(panel.classList.contains('theme-light'), false);
   assert.equal(toggle.classList.contains('theme-light'), false);
   assert.equal(btn.textContent, '☉');
   assert.equal(s.localStorage.getItem('ebay_scatterplot_theme'), 'dark');
@@ -143,7 +151,7 @@ test('theme toggle: two clicks return to original state', () => {
   const s = fresh();
   s.buildPanel();
   const panel = s.document.getElementById('ebay-scatter-panel');
-  const btn   = s.document.getElementById('ebay-scatter-theme');
+  const btn = s.document.getElementById('ebay-scatter-theme');
 
   btn.dispatchEvent(new s.window.MouseEvent('click', { bubbles: true }));
   btn.dispatchEvent(new s.window.MouseEvent('click', { bubbles: true }));
@@ -155,10 +163,15 @@ test('theme toggle: two clicks return to original state', () => {
 
 test('theme toggle: destroys existing chart and recreates it from storage', () => {
   const s = fresh();
-  s.saveItems([{ id: 'a', price: 10, date: '2024-01-01', title: 'T', type: 'sold' }]);
+  s.saveItems([
+    { id: 'a', price: 10, date: '2024-01-01', title: 'T', type: 'sold' },
+  ]);
   s.buildPanel();
   // Create the initial chart instance
-  s.renderSoldChart([{ id: 'a', price: 10, date: '2024-01-01', title: 'T', type: 'sold' }]);
+  s.renderSoldChart([
+    { id: 'a', price: 10, date: '2024-01-01', title: 'T', type: 'sold' },
+  ]);
+
   assert.equal(s.Chart.created.length, 1);
 
   const btn = s.document.getElementById('ebay-scatter-theme');
@@ -174,13 +187,16 @@ test('theme toggle: destroys existing chart and recreates it from storage', () =
 test('font-size input: chart tick and tooltip fonts are updated when charts exist', () => {
   const s = fresh();
   s.buildPanel();
-  s.renderSoldChart([{ id: 'a', price: 10, date: '2024-01-01', title: 'T', type: 'sold' }]);
+  s.renderSoldChart([
+    { id: 'a', price: 10, date: '2024-01-01', title: 'T', type: 'sold' },
+  ]);
   const input = s.document.getElementById('ebay-scatter-font-size');
-
   input.value = '20';
+
   input.dispatchEvent(new s.window.Event('input', { bubbles: true }));
 
   const chart = s.Chart.created[0];
+
   assert.equal(chart.options.scales.y.ticks.font.size, 20);
   assert.equal(chart.options.scales.x.ticks.font.size, 20);
   assert.equal(chart.options.plugins.tooltip.bodyFont.size, 20);

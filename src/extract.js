@@ -17,6 +17,7 @@ function extractItemId(card) {
   }
 
   const m = a.href.match(/\/itm\/(?:[^/?]+\/)?(\d+)/);
+
   return m ? m[1] : null;
 }
 
@@ -28,6 +29,7 @@ function extractTitle(card) {
     clone
       .querySelectorAll(".clipped, [aria-hidden='true']")
       .forEach((n) => n.remove());
+
     return clone.textContent.trim() || null;
   }
 
@@ -36,6 +38,7 @@ function extractTitle(card) {
 
 function parseAmount(text) {
   const m = text.replace(/,/g, '').match(/\d+\.?\d*/);
+
   return m ? parseFloat(m[0]) : NaN;
 }
 
@@ -43,18 +46,33 @@ function extractPrice(card) {
   // Find a leaf element whose entire text is a bare dollar amount: "$107.94"
   const leaves = leafElements(card, 'span, div');
   const priceEl = leaves.find((el) => {
-    if (!/^\$[\d,]+\.?\d*$/.test(el.textContent.trim())) { return false; }
+    if (!/^\$[\d,]+\.?\d*$/.test(el.textContent.trim())) {
+      return false;
+    }
     let node = el;
+
     for (let i = 0; i < 4; i++) {
-      if (!node) { break; }
-      if (window.getComputedStyle(node).textDecoration.includes('line-through')) { return false; }
+      if (!node) {
+        break;
+      }
+
+      if (
+        window.getComputedStyle(node).textDecoration.includes('line-through')
+      ) {
+        return false;
+      }
       node = node.parentElement;
     }
+
     return true;
   });
-  if (!priceEl) { return null; }
+
+  if (!priceEl) {
+    return null;
+  }
 
   const low = parseAmount(priceEl.textContent);
+
   if (isNaN(low)) {
     return null;
   }
@@ -68,26 +86,34 @@ function extractPrice(card) {
     if (el === priceEl || !/^\$[\d,]+\.?\d*$/.test(el.textContent.trim())) {
       return false;
     }
+
     // Exclude struck-through siblings (discounted original prices on sold cards)
     let n = el;
+
     for (let i = 0; i < 4; i++) {
-      if (!n) { break; }
+      if (!n) {
+        break;
+      }
+
       if (window.getComputedStyle(n).textDecoration.includes('line-through')) {
         return false;
       }
       n = n.parentElement;
     }
+
     return true;
   });
+
   if (siblingPrices.length > 0) {
-    const h = parseAmount(
-      siblingPrices[siblingPrices.length - 1].textContent,
-    );
-    if (!isNaN(h) && h > low) { high = h; }
+    const h = parseAmount(siblingPrices[siblingPrices.length - 1].textContent);
+    if (!isNaN(h) && h > low) {
+      high = h;
+    }
   }
 
   // Find shipping: leaf element containing "delivery" or "shipping" and a "$" amount
   let shipping = 0;
+
   for (const el of leaves) {
     const text = el.textContent.trim();
 
@@ -108,7 +134,11 @@ function extractPrice(card) {
     // "+$X.XX" leaf — delivery cost displayed in its own span, separate from "delivery" text
     if (/^\+\$[\d,]+(?:\.\d+)?\s*$/.test(text)) {
       const parsed = parseAmount(text);
-      if (!isNaN(parsed)) { shipping = parsed; break; }
+
+      if (!isNaN(parsed)) {
+        shipping = parsed;
+        break;
+      }
     }
   }
 
@@ -153,6 +183,7 @@ function extractItemData(card) {
 
   const soldDate = extractDate(card);
   let date;
+
   if (soldDate) {
     date = soldDate;
   } else {

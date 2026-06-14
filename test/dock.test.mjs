@@ -9,8 +9,14 @@ import { loadModules } from './helpers/load.mjs';
 
 const sandbox = loadModules(['constants.js', 'dock.js'], {
   setup: (s) => {
-    Object.defineProperty(s.window, 'innerWidth', { value: 1000, configurable: true });
-    Object.defineProperty(s.window, 'innerHeight', { value: 800, configurable: true });
+    Object.defineProperty(s.window, 'innerWidth', {
+      value: 1000,
+      configurable: true,
+    });
+    Object.defineProperty(s.window, 'innerHeight', {
+      value: 800,
+      configurable: true,
+    });
   },
 });
 const { nearestEdge } = sandbox;

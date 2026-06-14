@@ -17,24 +17,28 @@ const fresh = () => loadModules(['constants.js', 'storage.js']);
 
 test('loadItems returns [] when nothing is stored', () => {
   const s = fresh();
+
   assert.equal(JSON.stringify(s.loadItems()), '[]');
 });
 
 test('loadItems returns [] on corrupt JSON', () => {
   const s = fresh();
   s.window.localStorage.setItem(STORAGE_KEY, '{not json');
+
   assert.equal(JSON.stringify(s.loadItems()), '[]');
 });
 
 test('loadItems returns [] when the stored value is literal null', () => {
   const s = fresh();
   s.window.localStorage.setItem(STORAGE_KEY, 'null'); // JSON.parse('null') || []
+
   assert.equal(JSON.stringify(s.loadItems()), '[]');
 });
 
 test('saveItems → loadItems round-trips', () => {
   const s = fresh();
   s.saveItems([{ id: 'a' }]);
+
   assert.equal(JSON.stringify(s.loadItems()), JSON.stringify([{ id: 'a' }]));
 });
 
@@ -43,6 +47,7 @@ test('saveItems caps at MAX_ITEMS keeping the most recent (slice(-200))', () => 
   const items = Array.from({ length: 250 }, (_, i) => ({ id: String(i) }));
   s.saveItems(items);
   const got = s.loadItems();
+
   assert.equal(got.length, 200);
   assert.equal(got[0].id, '50'); // the first 50 are dropped
   assert.equal(got[199].id, '249'); // the newest is kept
@@ -52,6 +57,7 @@ test('saveItems leaves an under-cap list unchanged', () => {
   const s = fresh();
   const items = Array.from({ length: 10 }, (_, i) => ({ id: String(i) }));
   s.saveItems(items);
+
   assert.equal(s.loadItems().length, 10);
 });
 
@@ -59,5 +65,6 @@ test('saveItems([]) clears storage', () => {
   const s = fresh();
   s.saveItems([{ id: 'a' }]);
   s.saveItems([]);
+
   assert.equal(JSON.stringify(s.loadItems()), '[]');
 });

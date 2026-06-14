@@ -7,7 +7,10 @@ import { mkdirSync, copyFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 const files = [
-  ['node_modules/chart.js/dist/chart.umd.min.js', 'vendor/chart.js/chart.umd.min.js'],
+  [
+    'node_modules/chart.js/dist/chart.umd.min.js',
+    'vendor/chart.js/chart.umd.min.js',
+  ],
   ['node_modules/chart.js/LICENSE.md', 'vendor/chart.js/LICENSE.md'],
 ];
 

@@ -55,20 +55,35 @@ test('parseAmount grabs the first number run', () => {
 
 test('extractDate returns the displayed local date', () => {
   // invariant
-  assert.equal(extractDate(card('<span>Sold Jan 5, 2024</span>')), '2024-01-05');
+  assert.equal(
+    extractDate(card('<span>Sold Jan 5, 2024</span>')),
+    '2024-01-05',
+  );
   // real eBay caption uses a double space after "Sold"
-  assert.equal(extractDate(card('<span>Sold  May 26, 2026</span>')), '2026-05-26');
+  assert.equal(
+    extractDate(card('<span>Sold  May 26, 2026</span>')),
+    '2026-05-26',
+  );
   // year boundary, other side
-  assert.equal(extractDate(card('<span>Sold Jan 1, 2024</span>')), '2024-01-01');
+  assert.equal(
+    extractDate(card('<span>Sold Jan 1, 2024</span>')),
+    '2024-01-01',
+  );
   // comma is optional in the regex
-  assert.equal(extractDate(card('<span>Sold Jun 15 2026</span>')), '2026-06-15');
+  assert.equal(
+    extractDate(card('<span>Sold Jun 15 2026</span>')),
+    '2026-06-15',
+  );
 });
 
 test('extractDate keeps Dec 31 (strongest H1 / TZ lock-in)', () => {
   // invariant — THE H1 case. Under TZ=Australia/Sydney the old toISOString() bug
   // returned 2023-12-30 (the previous day). If this fails, the UTC round-trip
   // regression is back.
-  assert.equal(extractDate(card('<span>Sold Dec 31, 2023</span>')), '2023-12-31');
+  assert.equal(
+    extractDate(card('<span>Sold Dec 31, 2023</span>')),
+    '2023-12-31',
+  );
 });
 
 test('extractDate returns null when there is no Sold date', () => {
@@ -91,12 +106,14 @@ test('extractPrice sums item + shipping; free shipping adds nothing', () => {
   // invariant — assert float sums with tolerance.
   assert.ok(
     Math.abs(
-      extractPrice(card('<span>$10.00</span><span>+$2.50 delivery</span>')).price - 12.5,
+      extractPrice(card('<span>$10.00</span><span>+$2.50 delivery</span>'))
+        .price - 12.5,
     ) < 0.005,
   ); // split-span delivery
   assert.ok(
     Math.abs(
-      extractPrice(card('<span>$10.00</span><span>$3.99 shipping</span>')).price - 13.99,
+      extractPrice(card('<span>$10.00</span><span>$3.99 shipping</span>'))
+        .price - 13.99,
     ) < 0.005,
   ); // "shipping" + $
   assert.equal(
@@ -111,7 +128,10 @@ test('extractPrice sums item + shipping; free shipping adds nothing', () => {
 
 test('extractPrice detects a $X to $Y price range', () => {
   // invariant
-  const d = extractPrice(card('<span>$8.99</span><span> to </span><span>$18.99</span>'));
+  const d = extractPrice(
+    card('<span>$8.99</span><span> to </span><span>$18.99</span>'),
+  );
+
   assert.ok(Math.abs(d.price - 8.99) < 0.005);
   assert.ok(Math.abs(d.priceHigh - 18.99) < 0.005);
 });
@@ -121,6 +141,7 @@ test('extractPrice adds shipping to BOTH ends of a range', () => {
   const d = extractPrice(
     card('<span>$8.99</span><span>$18.99</span><span>+$2.00 delivery</span>'),
   );
+
   assert.ok(Math.abs(d.price - 10.99) < 0.005, `got ${d.price}`);
   assert.ok(Math.abs(d.priceHigh - 20.99) < 0.005, `got ${d.priceHigh}`);
 });
@@ -128,7 +149,9 @@ test('extractPrice adds shipping to BOTH ends of a range', () => {
 test('extractPrice returns null for a strikethrough (best-offer) price', () => {
   // invariant — strikethrough must be an INLINE style (jsdom ignores class rules).
   assert.equal(
-    extractPrice(card('<span style="text-decoration: line-through">$50.00</span>')),
+    extractPrice(
+      card('<span style="text-decoration: line-through">$50.00</span>'),
+    ),
     null,
   );
 });
@@ -136,8 +159,11 @@ test('extractPrice returns null for a strikethrough (best-offer) price', () => {
 test('extractPrice does not read a struck original price as the range high', () => {
   // invariant — a struck "was" price beside the real price is not a range high.
   const d = extractPrice(
-    card('<span>$10.00</span><span style="text-decoration: line-through">$40.00</span>'),
+    card(
+      '<span>$10.00</span><span style="text-decoration: line-through">$40.00</span>',
+    ),
   );
+
   assert.equal(d.price, 10);
   assert.equal(d.priceHigh, undefined);
 });
@@ -156,13 +182,16 @@ test('extractItemId prefers data-listingid', () => {
   // invariant
   const li = card('<a href="/itm/999">x</a>');
   li.setAttribute('data-listingid', '123456789012');
+
   assert.equal(extractItemId(li), '123456789012');
 });
 
 test('extractItemId falls back to the /itm/ URL', () => {
   // invariant
   assert.equal(
-    extractItemId(card('<a href="https://www.ebay.com/itm/203456789012?hash=abc">x</a>')),
+    extractItemId(
+      card('<a href="https://www.ebay.com/itm/203456789012?hash=abc">x</a>'),
+    ),
     '203456789012',
   );
 });
@@ -171,7 +200,9 @@ test('extractItemId parses the id after a title slug segment', () => {
   // invariant — /itm/<slug>/<id> form
   assert.equal(
     extractItemId(
-      card('<a href="https://www.ebay.com/itm/Some-Cool-Title/203456789012?x=1">x</a>'),
+      card(
+        '<a href="https://www.ebay.com/itm/Some-Cool-Title/203456789012?x=1">x</a>',
+      ),
     ),
     '203456789012',
   );
@@ -189,6 +220,7 @@ test('extractTitle uses the heading and strips clipped/hidden nodes', () => {
   const li = card(
     '<div role="heading" aria-level="3">Real Title<span class="clipped">Opens in a new window</span></div>',
   );
+
   assert.equal(extractTitle(li), 'Real Title');
 });
 
@@ -196,6 +228,7 @@ test('extractTitle falls back to the card aria-label', () => {
   // invariant
   const li = card('<div>no heading here</div>');
   li.setAttribute('aria-label', 'Card Label');
+
   assert.equal(extractTitle(li), 'Card Label');
 });
 
@@ -206,6 +239,7 @@ test("extractItemData uses today's date and type='unsold' for active listings", 
   const li = card('<a href="/itm/111">t</a><span>$5.00</span>');
   li.setAttribute('data-listingid', '111');
   const item = extractItemData(li);
+
   assert.ok(item !== null);
   assert.match(item.date, /^\d{4}-\d{2}-\d{2}$/);
   assert.equal(item.type, 'unsold');
@@ -219,6 +253,7 @@ test("extractItemData sets type='sold' and stores the sold date", () => {
   );
   li.setAttribute('data-listingid', '222');
   const item = extractItemData(li);
+
   assert.equal(item.type, 'sold');
   assert.equal(item.date, '2024-01-05');
 });
@@ -229,6 +264,7 @@ test('extractItemData propagates priceHigh into the record', () => {
     '<a href="/itm/333">t</a><span>$8.99</span><span> to </span><span>$18.99</span>',
   );
   li.setAttribute('data-listingid', '333');
+
   assert.ok(Math.abs(extractItemData(li).priceHigh - 18.99) < 0.005);
 });
 
@@ -241,6 +277,7 @@ test('extractItemData returns null without a parseable price', () => {
   // invariant — price required
   const li = card('<a href="/itm/444">t</a><span>no price here</span>');
   li.setAttribute('data-listingid', '444');
+
   assert.equal(extractItemData(li), null);
 });
 
@@ -248,6 +285,7 @@ test("extractItemData falls back to 'Unknown item' with no title", () => {
   // invariant — title fallback (no heading and no aria-label)
   const li = card('<a href="/itm/555">t</a><span>$5.00</span>');
   li.setAttribute('data-listingid', '555');
+
   assert.equal(extractItemData(li).title, 'Unknown item');
 });
 
@@ -257,6 +295,7 @@ test("extractItemData falls back to 'Unknown item' with no title", () => {
 
 test('markup-canary: NORMAL_FREE_SHIPPING — sold, free delivery', () => {
   const d = extractItemData(parse(NORMAL_FREE_SHIPPING));
+
   assert.equal(d.id, '336541855208');
   assert.equal(d.date, '2026-04-24');
   assert.equal(d.price, 69.99);
@@ -266,6 +305,7 @@ test('markup-canary: NORMAL_FREE_SHIPPING — sold, free delivery', () => {
 
 test('markup-canary: CHARGED_SHIPPING — sold, item + paid delivery', () => {
   const r = extractPrice(parse(CHARGED_SHIPPING));
+
   assert.ok(Math.abs(r.price - 150.98) < 0.005, `got ${r.price}`);
 });
 
@@ -276,6 +316,7 @@ test('markup-canary: BEST_OFFER — struck price → null', () => {
 
 test('markup-canary: ACTIVE_RANGE_DELIVERY — active range + split delivery', () => {
   const d = extractItemData(parse(ACTIVE_RANGE_DELIVERY));
+
   assert.equal(d.id, '284586461118');
   assert.equal(d.type, 'unsold');
   assert.match(d.date, /^\d{4}-\d{2}-\d{2}$/); // today's fallback — never a literal date
@@ -285,6 +326,7 @@ test('markup-canary: ACTIVE_RANGE_DELIVERY — active range + split delivery', (
 
 test('markup-canary: ACTIVE_RANGE — active range, no delivery', () => {
   const d = extractItemData(parse(ACTIVE_RANGE));
+
   assert.equal(d.id, '167030069483');
   assert.equal(d.type, 'unsold');
   assert.ok(Math.abs(d.price - 8.99) < 0.005, `got ${d.price}`);
@@ -293,6 +335,7 @@ test('markup-canary: ACTIVE_RANGE — active range, no delivery', () => {
 
 test('markup-canary: ACTIVE_SPLIT_DELIVERY — active, split-span delivery', () => {
   const d = extractItemData(parse(ACTIVE_SPLIT_DELIVERY));
+
   assert.equal(d.id, '174433187577');
   assert.equal(d.type, 'unsold');
   assert.ok(Math.abs(d.price - 16.4) < 0.005, `got ${d.price}`); // 12.50 + 3.90

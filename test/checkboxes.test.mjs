@@ -23,14 +23,20 @@ function buildCheckboxDom(doc, perItem) {
   for (const { id, itemType, checked } of perItem) {
     const label = doc.createElement('label');
     label.className = 'ebay-scatter-cb';
+
     const cb = doc.createElement('input');
     cb.type = 'checkbox';
     cb.dataset.itemId = id;
-    if (itemType !== undefined) cb.dataset.itemType = itemType;
+
+    if (itemType !== undefined) {
+      cb.dataset.itemType = itemType;
+    }
+
     cb.checked = checked;
     label.appendChild(cb);
     doc.body.appendChild(label);
   }
+
   return all;
 }
 
@@ -42,6 +48,7 @@ test('syncPlotAll: none checked → unchecked, not indeterminate', () => {
     { id: 'a', checked: false },
     { id: 'b', checked: false },
   ]);
+
   s.syncPlotAll();
   assert.equal(all.checked, false);
   assert.equal(all.indeterminate, false);
@@ -53,6 +60,7 @@ test('syncPlotAll: some checked → indeterminate', () => {
     { id: 'a', checked: true },
     { id: 'b', checked: false },
   ]);
+
   s.syncPlotAll();
   assert.equal(all.checked, false);
   assert.equal(all.indeterminate, true);
@@ -64,6 +72,7 @@ test('syncPlotAll: all checked → checked, not indeterminate', () => {
     { id: 'a', checked: true },
     { id: 'b', checked: true },
   ]);
+
   s.syncPlotAll();
   assert.equal(all.checked, true);
   assert.equal(all.indeterminate, false);
@@ -77,6 +86,7 @@ test('syncPlotAll: no per-item boxes → no throw, state untouched (early return
   all.checked = true; // a deliberate pre-state the early return must not clobber
   all.indeterminate = true;
   s.document.body.appendChild(all);
+
   assert.doesNotThrow(() => s.syncPlotAll());
   assert.equal(all.checked, true);
   assert.equal(all.indeterminate, true);
@@ -86,15 +96,21 @@ test('syncPlotAll: no per-item boxes → no throw, state untouched (early return
 
 test('reconcileCheckboxes: each box reflects whether storage holds its id', () => {
   const s = fresh();
-  s.saveItems([{ id: 'a', type: 'sold' }, { id: 'c', type: 'sold' }]);
+  s.saveItems([
+    { id: 'a', type: 'sold' },
+    { id: 'c', type: 'sold' },
+  ]);
   buildCheckboxDom(s.document, [
     { id: 'a', itemType: 'sold', checked: false }, // → should flip to checked
-    { id: 'b', itemType: 'sold', checked: true },  // → should flip to unchecked
+    { id: 'b', itemType: 'sold', checked: true }, // → should flip to unchecked
     { id: 'c', itemType: 'sold', checked: false }, // → should flip to checked
   ]);
   s.reconcileCheckboxes();
+
   const checkedOf = (id) =>
-    s.document.querySelector(`.ebay-scatter-cb input[data-item-id="${id}"]`).checked;
+    s.document.querySelector(`.ebay-scatter-cb input[data-item-id="${id}"]`)
+      .checked;
+
   assert.equal(checkedOf('a'), true);
   assert.equal(checkedOf('b'), false);
   assert.equal(checkedOf('c'), true);
@@ -108,7 +124,11 @@ test('reconcileCheckboxes: id in storage but different type → unchecked', () =
     { id: 'x', itemType: 'unsold', checked: true }, // same ID, active-page checkbox
   ]);
   s.reconcileCheckboxes();
-  const cb = s.document.querySelector('.ebay-scatter-cb input[data-item-id="x"]');
+
+  const cb = s.document.querySelector(
+    '.ebay-scatter-cb input[data-item-id="x"]',
+  );
+
   assert.equal(cb.checked, false);
 });
 
@@ -127,7 +147,9 @@ test('injectCheckbox change handler: cross-type id coexists in storage', () => {
   const s = freshCross();
 
   // Pre-store a sold record for id 'X'
-  s.saveItems([{ id: 'X', type: 'sold', price: 10, date: '2024-01-01', title: 'Item X' }]);
+  s.saveItems([
+    { id: 'X', type: 'sold', price: 10, date: '2024-01-01', title: 'Item X' },
+  ]);
 
   // Build a minimal active listing card for the same id
   const card = s.document.createElement('li');
@@ -139,14 +161,23 @@ test('injectCheckbox change handler: cross-type id coexists in storage', () => {
 
   const cb = card.querySelector('.ebay-scatter-cb input');
   // Sold record in storage doesn't match type 'unsold' → starts unchecked
-  assert.equal(cb.checked, false, 'starts unchecked (type mismatch with stored sold record)');
+  assert.equal(
+    cb.checked,
+    false,
+    'starts unchecked (type mismatch with stored sold record)',
+  );
 
   cb.checked = true;
   cb.dispatchEvent(new s.window.Event('change', { bubbles: true }));
 
   // Both records must coexist; the checkbox must stay checked
   const ids = s.loadItems().map((i) => `${i.id}:${i.type}`);
-  assert.ok(ids.includes('X:sold'),   'sold X preserved');
+
+  assert.ok(ids.includes('X:sold'), 'sold X preserved');
   assert.ok(ids.includes('X:unsold'), 'active X added');
-  assert.equal(cb.checked, true, 'checkbox stays checked (no revert from reconcileCheckboxes)');
+  assert.equal(
+    cb.checked,
+    true,
+    'checkbox stays checked (no revert from reconcileCheckboxes)',
+  );
 });
