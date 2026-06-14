@@ -51,7 +51,8 @@ function parseAmount(text) {
   return pm ? parseFloat(pm[0]) : NaN;
 }
 
-const PRICE_RE = /^(?:(?:[A-Z]{1,3}\s)?\$[\d,  ]+\.?\d*|£[\d,  ]+\.?\d*|EUR\s+[\d.  ]+,\d{2}|[\d.  ]+,\d{2}\s*(?:EUR|\$C))$/;
+const PRICE_RE =
+  /^(?:(?:[A-Z]{1,3}\s)?\$[\d,  ]+\.?\d*|£[\d,  ]+\.?\d*|EUR\s+[\d.  ]+,\d{2}|[\d.  ]+,\d{2}\s*(?:EUR|\$C))$/;
 
 function extractPrice(card) {
   // Find a leaf element whose entire text is a bare price amount.
@@ -109,6 +110,7 @@ function extractPrice(card) {
       if (window.getComputedStyle(n).textDecoration.includes('line-through')) {
         return false;
       }
+
       n = n.parentElement;
     }
 
@@ -117,6 +119,7 @@ function extractPrice(card) {
 
   if (siblingPrices.length > 0) {
     const h = parseAmount(siblingPrices[siblingPrices.length - 1].textContent);
+
     if (!isNaN(h) && h > low) {
       high = h;
     }
@@ -132,12 +135,21 @@ function extractPrice(card) {
   for (const el of leaves.slice(leaves.indexOf(priceEl) + 1)) {
     const text = el.textContent.trim();
 
-    if (/free\s+(?:delivery|shipping|postage)|kostenlos(?:er)?\s+versand|livraison\s+gratuite|spedizione\s+gratuita|env[ií]o\s+gratis/i.test(text)) {
+    if (
+      /free\s+(?:delivery|shipping|postage)|kostenlos(?:er)?\s+versand|livraison\s+gratuite|spedizione\s+gratuita|env[ií]o\s+gratis/i.test(
+        text,
+      )
+    ) {
       shipping = 0;
       break;
     }
 
-    if (/(delivery|shipping|postage|versand|lieferung|livraison|consegna|spedizione|env[ií]o|exp[eé]dition)/i.test(text) && /[$£]|EUR/.test(text)) {
+    if (
+      /(delivery|shipping|postage|versand|lieferung|livraison|consegna|spedizione|env[ií]o|exp[eé]dition)/i.test(
+        text,
+      ) &&
+      /[$£]|EUR/.test(text)
+    ) {
       const parsed = parseAmount(text);
 
       if (!isNaN(parsed)) {
@@ -149,7 +161,11 @@ function extractPrice(card) {
     // "+amount" leaf — delivery cost in its own span, separate from any keyword text.
     // Matches $, £, EUR-prefix, and EUR-suffix formats; no end-anchor since DE/IT
     // spans include trailing text ("+EUR 2,95 Lieferung").
-    if (/^\+\s*(?:(?:[A-Z]{1,3}\s)?\$[\d,  ]+\.?\d*|£[\d,  ]+\.?\d*|EUR\s+[\d.  ]+,\d{2}|[\d.  ]+,\d{2}\s*(?:EUR|\$C))/.test(text)) {
+    if (
+      /^\+\s*(?:(?:[A-Z]{1,3}\s)?\$[\d,  ]+\.?\d*|£[\d,  ]+\.?\d*|EUR\s+[\d.  ]+,\d{2}|[\d.  ]+,\d{2}\s*(?:EUR|\$C))/.test(
+        text,
+      )
+    ) {
       const parsed = parseAmount(text);
 
       if (!isNaN(parsed)) {
@@ -164,23 +180,64 @@ function extractPrice(card) {
     : { price: low + shipping };
 }
 
-const SOLD_RE = /^(?:Sold|Verkauft|Vendu(?:\s+le)?|Venduto|Venduti|Vendido|Vendidos)\b/i;
+const SOLD_RE =
+  /^(?:Sold|Verkauft|Vendu(?:\s+le)?|Venduto|Venduti|Vendido|Vendidos)\b/i;
 
 const MONTH_MAP = {
   // English (US, UK, AU, CA EN, MX EN; DE abbreviates Jun same as EN)
-  jan: 0, january: 0, feb: 1, february: 1, mar: 2, march: 2,
-  apr: 3, april: 3, may: 4, jun: 5, june: 5, jul: 6, july: 6,
-  aug: 7, august: 7, sep: 8, sept: 8, september: 8,
-  oct: 9, october: 9, nov: 10, november: 10, dec: 11, december: 11,
+  jan: 0,
+  january: 0,
+  feb: 1,
+  february: 1,
+  mar: 2,
+  march: 2,
+  apr: 3,
+  april: 3,
+  may: 4,
+  jun: 5,
+  june: 5,
+  jul: 6,
+  july: 6,
+  aug: 7,
+  august: 7,
+  sep: 8,
+  sept: 8,
+  september: 8,
+  oct: 9,
+  october: 9,
+  nov: 10,
+  november: 10,
+  dec: 11,
+  december: 11,
   // French (FR, CA FR)
-  janv: 0, 'fév': 1, 'févr': 1, mars: 2, avr: 3, mai: 4, juin: 5,
-  juil: 6, 'août': 7, 'déc': 11,
+  janv: 0,
+  fév: 1,
+  févr: 1,
+  mars: 2,
+  avr: 3,
+  mai: 4,
+  juin: 5,
+  juil: 6,
+  août: 7,
+  déc: 11,
   // Italian (IT)
-  gen: 0, mag: 4, magg: 4, giu: 5, lug: 6, ago: 7, set: 8, ott: 9, dic: 11,
+  gen: 0,
+  mag: 4,
+  magg: 4,
+  giu: 5,
+  lug: 6,
+  ago: 7,
+  set: 8,
+  ott: 9,
+  dic: 11,
   // Spanish (ES, MX ES)
-  ene: 0, abr: 3,
+  ene: 0,
+  abr: 3,
   // German (DE)
-  'mär': 2, 'märz': 2, okt: 9, dez: 11,
+  mär: 2,
+  märz: 2,
+  okt: 9,
+  dez: 11,
 };
 
 function extractDate(card) {

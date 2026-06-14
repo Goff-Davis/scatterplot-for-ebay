@@ -1,0 +1,5 @@
+node_modules/
+vendor/
+web-ext-artifacts/
+.claude/
+test/fixtures/

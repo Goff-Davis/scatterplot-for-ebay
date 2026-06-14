@@ -15,6 +15,7 @@ npm install          # installs Chart.js + web-ext; postinstall vendors Chart.js
 The extension's own source (`src/*.js`) is loaded as-is — no bundler or transpiler. Chart.js is the one third-party file the extension ships; `scripts/vendor.mjs` copies it (and its license) from `node_modules/` into `vendor/chart.js/` so the packaged XPI never references `node_modules/`. The vendor step runs automatically on `npm install` (postinstall) and before `npm run build`.
 
 Load the extension in Firefox for development:
+
 1. `about:debugging#/runtime/this-firefox` → Load Temporary Add-on → select `manifest.json`
 2. Navigate to any eBay search page (e.g. `*.ebay.com/sch/*`, `*.ebay.co.uk/sch/*`, etc.)
 3. After editing any `src/*.js` file, click "Reload" on the extension card
@@ -41,6 +42,7 @@ TZ=Australia/Sydney node --test test/storage.test.mjs   # run one file (keep the
 Requires **Node ≥ 21** (declared in `package.json` `engines`): the test-file glob is expanded by Node's test runner, not the shell, so the script double-quotes it to work in both POSIX `sh` and Windows `cmd`.
 
 The suite locks down the core logic that must stay stable regardless of eBay's markup: extraction (`src/extract.js`), the storage contract (`src/storage.js`), dock geometry (`nearestEdge`), chart data-shaping math (`src/chart.js`), and the checkbox state reconcilers (`src/checkboxes.js`). Coverage is **deliberately scoped** (see `TEST_PLAN.md`) — every test is labeled with one of three buckets: **invariant** (synthetic DOM, must hold forever), **documents-behavior** (a current/debatable choice pinned so a change is noticed), or **markup-canary** (a real captured eBay card; kept few, fails loudly when the markup shifts). Files live in `test/`:
+
 - `test/extract.test.mjs` — `parseAmount`, `extractPrice`, `extractDate`, `extractItemId`, `extractTitle`, `extractItemData`, plus the markup-canary fixtures
 - `test/storage.test.mjs` — `loadItems`/`saveItems` degradation + the `MAX_ITEMS` cap
 - `test/dock.test.mjs` — `nearestEdge` geometry (incl. the center tie-break)
@@ -52,6 +54,7 @@ The suite locks down the core logic that must stay stable regardless of eBay's m
 - `test/fixtures/*.html` — real listing cards (sold-search **and** active-search), trimmed and self-contained (no external assets), with expected values asserted against the real data. International pages (`international-pages/LOCALE/TYPE/`) are minified single-line HTML — use Perl to extract cards: `perl -0777 -ne 'if (/(<li\b[^>]*data-listingid=ID[^>]*>.*?<\/li>)/s) { $c=$1; $c=~s/<img\b[^>]*>/ /g; print $c }' page.htm`. CSS-class-only strikethrough spans need `style="text-decoration: line-through"` added inline (jsdom ignores class-based rules).
 
 Key conventions:
+
 - **The `test` script pins `TZ=Australia/Sydney`** (a positive UTC offset) on purpose: `extractDate` must store the displayed calendar date, and the original H1 bug (UTC round-trip via `toISOString()`) only shows up at a positive offset. Running there means any reintroduction fails the date tests even on US machines.
 - **`loadModules`/`loadExtract` return vm-realm values**: objects and arrays they hand back are constructed inside the `node:vm` sandbox, so `assert/strict` `deepEqual` rejects them on prototype identity — assert structural values via `JSON.stringify` (or spread `[...arr]` into the test realm), not `deepEqual`.
 - **Summed prices are floats** (`item + shipping`), so assert them with a tolerance, never a hand-rounded literal.
@@ -64,6 +67,7 @@ Key conventions:
 Content scripts in `src/` are loaded sequentially by the manifest. All files share the same content script sandbox scope — no IIFE, no ES modules. Top-level `const`/`let`/`function` declarations in one file are accessible to all subsequently loaded files. The content scripts are registered for eBay search pages across all supported domains (`ebay.com`, `ebay.co.uk`, `ebay.de`, `ebay.ca`, `ebay.com.au`, `ebay.fr`, `ebay.it`, `ebay.es` — 8 patterns in the manifest), and `src/init.js` runs unconditionally on all matching pages (no URL guard). Chart.js is loaded first via the manifest (`vendor/chart.js/chart.umd.min.js`) so `window.Chart` is available synchronously — no CDN injection (eBay's CSP blocks it).
 
 **Source files (load order matches manifest):**
+
 - `src/constants.js` — eight `const` values: `RESULTS_SEL`, `STORAGE_KEY`, `MAX_ITEMS`, `DOCK_KEY`, `SNAP_THRESHOLD`, `PANEL_OPEN_KEY`, `THEME_KEY`, `FONT_SIZE_KEY`
 - `src/storage.js` — `loadItems`, `saveItems` (localStorage, 200-item cap)
 - `src/extract.js` — content-based DOM extraction: `leafElements`, `extractItemId`, `extractTitle`, `parseAmount`, `extractPrice`, `extractDate`, `extractItemData`
@@ -100,12 +104,13 @@ Content scripts in `src/` are loaded sequentially by the manifest. All files sha
 ## Data extraction
 
 Extraction is content-based (resilient to eBay class renames):
+
 - **Item ID:** `data-listingid` attribute, fallback to `/itm/<id>` URL parsing
 - **Date:** leaf element (`span`/`div`) matching `SOLD_RE` (`/^(?:Sold|Verkauft|Vendu(?:\s+le)?|Venduto|Venduti|Vendido|Vendidos)\b/i`) — parses the date substring using `MONTH_MAP` (EN/FR/IT/ES/DE month names). Handles day-first format ("14 Jun 2026", used by UK/AU/CA/DE/FR/IT/ES) and month-first ("Jun 14, 2026", US/MX EN) via pure string manipulation — no `new Date()` conversion (immune to UTC/TZ regression). Returns `null` for active (unsold) listings.
 - **Price:** leaf element whose full text matches `PRICE_RE` (`$X.XX`, `£X.XX`, `EUR X,XX` prefix, or `X,XX EUR` suffix) — checks parent chain for `line-through` (best-offer items are skipped); shipping added if a leaf **after the price element in DOM order** contains a multi-language shipping keyword (`delivery`/`shipping`/`Versand`/`Lieferung`/`livraison`/`consegna`/`spedizione`/`envío`/`expédition`) and a currency amount, or a `+<amount>` leaf in any supported currency (split-span delivery pattern). Scanning only post-price leaves prevents false positives when product titles contain free-shipping phrases (e.g. Italian "SPEDIZIONE GRATUITA", French "Livraison gratuite") — title spans always precede the price in eBay card DOM. `parseAmount` auto-detects EUR comma-decimal (`X,XX` with exactly 2 digits before space/end) vs. period-decimal; US thousands commas (`$1,234.56`) always have 3+ digits after the comma and are never misread. Returns `{ price, priceHigh? }` or `null`. `priceHigh` is set when a second non-struck price span exists in the same parent element (range listings, e.g. `$8.99 to $18.99`). Mixed currencies (foreign sellers) appear on every eBay page and are plotted at face value — no currency conversion.
 - **Title:** `[role="heading"][aria-level="3"]` with `.clipped`/`aria-hidden` nodes stripped; falls back to card `aria-label`
 
-`extractItemData` returns `null` for best-offer items or items with unparseable prices. Items with a sold-prefix date get `type: 'sold'`; items without get `type: 'unsold'` and today's local date as a fallback (so they still appear in the chart). Items in localStorage from before the `type` field was added are treated as `'sold'`. `injectCheckbox` only injects a checkbox if `extractItemData` succeeds. Non-listing tiles (ads/promos) are marked `data-scatter-injected="skip"` and never re-checked; a listing card that fails extraction is left *unmarked* so a later observer pass retries it (handles eBay's lazy rendering). Successfully extracted data is cached in a `WeakMap` (`cardData`) so the checkbox handler and "Plot all" don't re-extract.
+`extractItemData` returns `null` for best-offer items or items with unparseable prices. Items with a sold-prefix date get `type: 'sold'`; items without get `type: 'unsold'` and today's local date as a fallback (so they still appear in the chart). Items in localStorage from before the `type` field was added are treated as `'sold'`. `injectCheckbox` only injects a checkbox if `extractItemData` succeeds. Non-listing tiles (ads/promos) are marked `data-scatter-injected="skip"` and never re-checked; a listing card that fails extraction is left _unmarked_ so a later observer pass retries it (handles eBay's lazy rendering). Successfully extracted data is cached in a `WeakMap` (`cardData`) so the checkbox handler and "Plot all" don't re-extract.
 
 ## Checkboxes & "Plot all"
 

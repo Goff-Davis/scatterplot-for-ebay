@@ -12,7 +12,8 @@
     "lint": "web-ext lint",
     "build": "npm run vendor && web-ext build --overwrite-dest",
     "sign": "web-ext sign --channel=listed",
-    "test": "cross-env TZ=Australia/Sydney node --test \"test/**/*.test.mjs\""
+    "test": "cross-env TZ=Australia/Sydney node --test \"test/**/*.test.mjs\"",
+    "format": "prettier --write ."
   },
   "dependencies": {
     "chart.js": "^4.5.1"
@@ -20,6 +21,7 @@
   "devDependencies": {
     "cross-env": "^10.1.0",
     "jsdom": "^29.1.1",
+    "prettier": "^3.8.4",
     "web-ext": "^10.3.0"
   },
   "webExt": {

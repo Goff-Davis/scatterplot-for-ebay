@@ -40,17 +40,17 @@ const read = (name) =>
 // - mx-es-sold:   MXN $861.27 + MXN $2987.99 envío (id 147349367091, total ~3849.26)
 //                 "was" price span has inline text-decoration:line-through added
 //                 (live page uses CSS class; jsdom can't see class-based rules)
-export const AU_SOLD      = read('au-sold.html');
-export const UK_SOLD      = read('uk-sold.html');
-export const CA_EN_SOLD   = read('ca-en-sold.html');
-export const CA_FR_SOLD   = read('ca-fr-sold.html');
-export const FR_SOLD      = read('fr-sold.html');
-export const IT_GIU_SOLD  = read('it-giu-sold.html');
+export const AU_SOLD = read('au-sold.html');
+export const UK_SOLD = read('uk-sold.html');
+export const CA_EN_SOLD = read('ca-en-sold.html');
+export const CA_FR_SOLD = read('ca-fr-sold.html');
+export const FR_SOLD = read('fr-sold.html');
+export const IT_GIU_SOLD = read('it-giu-sold.html');
 export const IT_MAGG_SOLD = read('it-magg-sold.html');
-export const DE_SOLD      = read('de-sold.html');
-export const ES_SOLD      = read('es-sold.html');
-export const MX_EN_SOLD   = read('mx-en-sold.html');
-export const MX_ES_SOLD   = read('mx-es-sold.html');
+export const DE_SOLD = read('de-sold.html');
+export const ES_SOLD = read('es-sold.html');
+export const MX_EN_SOLD = read('mx-en-sold.html');
+export const MX_ES_SOLD = read('mx-es-sold.html');
 export const NORMAL_FREE_SHIPPING = read('normal-free-shipping.html');
 export const CHARGED_SHIPPING = read('charged-shipping.html');
 export const BEST_OFFER = read('best-offer-strikethrough.html');

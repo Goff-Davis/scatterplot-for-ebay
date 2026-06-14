@@ -115,7 +115,6 @@ function buildPanel() {
     .addEventListener('click', clearAll);
 
   themeBtn.addEventListener('click', () => {
-
     const isLight = panel.classList.toggle('theme-light');
     toggle.classList.toggle('theme-light', isLight);
     themeBtn.textContent = isLight ? '☾' : '☉';

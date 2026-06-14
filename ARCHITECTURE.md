@@ -8,7 +8,7 @@ This is a Firefox browser extension that adds a price history panel to eBay sear
 
 The extension is declared as a **content script** in `manifest.json`, registered for eBay search-result pages (URLs under `/sch/`) across all supported domains: `ebay.com` (US and Mexico), `ebay.co.uk` (UK), `ebay.de` (Germany), `ebay.ca` (Canada), `ebay.com.au` (Australia and New Zealand), `ebay.fr` (France), `ebay.it` (Italy), and `ebay.es` (Spain). It runs on all matching pages — there is no URL guard. The panel starts minimized by default (only the 📈 toggle tab is visible) and opens on first interaction. Once opened, that state is stored in `localStorage` and restored on the next page load if saved data exists; closing the panel with × clears the flag.
 
-The extension's own code has no build step — Firefox loads the `src/` files directly, in the order listed in `manifest.json`, with no bundler or transpiler. The one third-party library it ships, Chart.js, is *vendored* (copied into `vendor/`) so it travels with the extension; see *Dependencies and vendoring* below. Packaging the whole thing into a distributable `.zip` is done with `web-ext` (`npm run build`).
+The extension's own code has no build step — Firefox loads the `src/` files directly, in the order listed in `manifest.json`, with no bundler or transpiler. The one third-party library it ships, Chart.js, is _vendored_ (copied into `vendor/`) so it travels with the extension; see _Dependencies and vendoring_ below. Packaging the whole thing into a distributable `.zip` is done with `web-ext` (`npm run build`).
 
 ## File structure
 
@@ -102,11 +102,11 @@ Storage deduplicates by `id+type` (composite key `"${id}:${type || 'sold'}"`). A
 
 The "Plot all" checkbox sits above the results list and has three visual states using the browser's native `indeterminate` property:
 
-| State | Meaning |
-|-------|---------|
-| Unchecked | No items selected |
-| Indeterminate (filled bar) | Some items selected |
-| Checked | All valid items selected |
+| State                      | Meaning                  |
+| -------------------------- | ------------------------ |
+| Unchecked                  | No items selected        |
+| Indeterminate (filled bar) | Some items selected      |
+| Checked                    | All valid items selected |
 
 `syncPlotAll()` is called after every state change to keep the three-state checkbox accurate.
 
@@ -132,11 +132,11 @@ The extension ships exactly one third-party file: **Chart.js**. It's installed v
 
 Rather than point the manifest at `node_modules/` (which isn't part of a packaged add-on), a small script — `scripts/vendor.mjs` — copies Chart.js and its license from `node_modules/` into `vendor/chart.js/`, and the manifest loads `vendor/chart.js/chart.umd.min.js`. Vendoring runs automatically on `npm install` (a `postinstall` hook) and again before every `npm run build`, so `vendor/` always matches the installed version.
 
-| Dependency | Type | Purpose |
-|------------|------|---------|
+| Dependency | Type    | Purpose                                                  |
+| ---------- | ------- | -------------------------------------------------------- |
 | `chart.js` | runtime | Scatterplot rendering (vendored into `vendor/`, shipped) |
-| `web-ext` | dev | Lint, build, and sign the extension for Firefox Add-ons |
-| `jsdom` | dev | DOM implementation used by the unit tests |
+| `web-ext`  | dev     | Lint, build, and sign the extension for Firefox Add-ons  |
+| `jsdom`    | dev     | DOM implementation used by the unit tests                |
 
 ## Building and packaging
 
