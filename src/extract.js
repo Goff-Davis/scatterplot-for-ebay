@@ -54,6 +54,27 @@ function parseAmount(text) {
 const PRICE_RE =
   /^(?:(?:[A-Z]{1,3}\s)?\$[\d,  ]+\.?\d*|£[\d,  ]+\.?\d*|EUR\s+[\d.  ]+,\d{2}|[\d.  ]+,\d{2}\s*(?:EUR|\$C))$/;
 
+function detectCurrencySymbol(text) {
+  if (/£/.test(text)) {
+    return '£';
+  }
+
+  if (/EUR/.test(text)) {
+    return '€';
+  }
+
+  if (/\$C/.test(text)) {
+    return 'C$';
+  }
+
+  const m = text.match(/^([A-Z]{1,3})\s\$/);
+  if (m && m[1] !== 'US') {
+    return m[1] + '$';
+  }
+
+  return '$';
+}
+
 function extractPrice(card) {
   // Find a leaf element whose entire text is a bare price amount.
   const leaves = leafElements(card, 'span, div');
@@ -175,9 +196,11 @@ function extractPrice(card) {
     }
   }
 
+  const currencySymbol = detectCurrencySymbol(priceEl.textContent.trim());
+
   return high !== undefined
-    ? { price: low + shipping, priceHigh: high + shipping }
-    : { price: low + shipping };
+    ? { price: low + shipping, priceHigh: high + shipping, currencySymbol }
+    : { price: low + shipping, currencySymbol };
 }
 
 const SOLD_RE =
@@ -241,33 +264,35 @@ const MONTH_MAP = {
 };
 
 function extractDate(card) {
-  const el = leafElements(card, 'span, div').find((el) =>
-    SOLD_RE.test(el.textContent.trim()),
-  );
-
-  if (!el) {
-    return null;
-  }
-
-  const dateStr = el.textContent.trim().replace(SOLD_RE, '').trim();
   const pad = (n) => String(n).padStart(2, '0');
 
-  // Day-first: "14 Jun 2026", "13. Jun 2026", "11 giu. 2026"
-  const df = dateStr.match(/^(\d{1,2})\.?\s+([A-Za-zÀ-ɏ]+)\.?\s+(\d{4})$/);
-  if (df) {
-    const mon = MONTH_MAP[df[2].toLowerCase()];
-    if (mon !== undefined) {
-      return `${df[3]}-${pad(mon + 1)}-${pad(parseInt(df[1], 10))}`;
-    }
-  }
+  for (const el of leafElements(card, 'span, div')) {
+    const text = el.textContent.trim();
 
-  // Month-first: "Jun 14, 2026" (US, MX EN)
-  const mf = dateStr.match(/^([A-Za-z]+)\s+(\d{1,2}),?\s*(\d{4})$/);
-  if (mf) {
-    const mon = MONTH_MAP[mf[1].toLowerCase()];
-    if (mon !== undefined) {
-      return `${mf[3]}-${pad(mon + 1)}-${pad(parseInt(mf[2], 10))}`;
+    if (!SOLD_RE.test(text)) {
+      continue;
     }
+
+    const dateStr = text.replace(SOLD_RE, '').trim();
+
+    // Day-first: "14 Jun 2026", "13. Jun 2026", "11 giu. 2026"
+    const df = dateStr.match(/^(\d{1,2})\.?\s+([A-Za-zÀ-ɏ]+)\.?\s+(\d{4})$/);
+    if (df) {
+      const mon = MONTH_MAP[df[2].toLowerCase()];
+      if (mon !== undefined) {
+        return `${df[3]}-${pad(mon + 1)}-${pad(parseInt(df[1], 10))}`;
+      }
+    }
+
+    // Month-first: "Jun 14, 2026" (US, MX EN)
+    const mf = dateStr.match(/^([A-Za-z]+)\s+(\d{1,2}),?\s*(\d{4})$/);
+    if (mf) {
+      const mon = MONTH_MAP[mf[1].toLowerCase()];
+      if (mon !== undefined) {
+        return `${mf[3]}-${pad(mon + 1)}-${pad(parseInt(mf[2], 10))}`;
+      }
+    }
+    // sold-word matched but date didn't parse — keep scanning
   }
 
   return null;
@@ -298,6 +323,7 @@ function extractItemData(card) {
     date,
     price: priceData.price,
     type: soldDate ? 'sold' : 'unsold',
+    currencySymbol: priceData.currencySymbol,
   };
 
   if (priceData.priceHigh !== undefined) {

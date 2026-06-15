@@ -76,6 +76,17 @@ function renderChart(items) {
   renderUnsoldChart(unsoldItems);
 }
 
+function currencySymbolFor(items) {
+  const counts = {};
+
+  for (const item of items) {
+    const s = item.currencySymbol || '$';
+    counts[s] = (counts[s] || 0) + 1;
+  }
+
+  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '$';
+}
+
 function renderSoldChart(items) {
   const wrap = document.getElementById('ebay-scatter-sold-wrap');
   const canvas = document.getElementById('ebay-scatter-canvas');
@@ -118,6 +129,7 @@ function renderSoldChart(items) {
 
   const c = getChartColors();
   const fontSize = getChartFontSize();
+  const sym = currencySymbolFor(items);
 
   chartInstance = new window.Chart(canvas, {
     type: 'scatter',
@@ -148,8 +160,8 @@ function renderSoldChart(items) {
               const { title, date, y, priceHigh } = ctx.raw;
               const priceStr =
                 priceHigh !== undefined
-                  ? `$${y.toFixed(2)}–$${priceHigh.toFixed(2)}`
-                  : `$${y.toFixed(2)}`;
+                  ? `${sym}${y.toFixed(2)}–${sym}${priceHigh.toFixed(2)}`
+                  : `${sym}${y.toFixed(2)}`;
 
               return `${priceStr} | ${date} | ${title}`;
             },
@@ -172,7 +184,7 @@ function renderSoldChart(items) {
           ticks: {
             color: c.tick,
             font: { size: fontSize },
-            callback: (v) => `$${v.toFixed(0)}`,
+            callback: (v) => `${sym}${v.toFixed(0)}`,
           },
           grid: { color: c.grid },
         },
@@ -240,6 +252,7 @@ function renderUnsoldChart(items) {
 
   const c = getChartColors();
   const fontSize = getChartFontSize();
+  const sym = currencySymbolFor(items);
 
   chartInstanceUnsold = new window.Chart(canvas, {
     type: 'scatter',
@@ -270,8 +283,8 @@ function renderUnsoldChart(items) {
               const { title, y, priceHigh } = ctx.raw;
               const priceStr =
                 priceHigh !== undefined
-                  ? `$${y.toFixed(2)}–$${priceHigh.toFixed(2)}`
-                  : `$${y.toFixed(2)}`;
+                  ? `${sym}${y.toFixed(2)}–${sym}${priceHigh.toFixed(2)}`
+                  : `${sym}${y.toFixed(2)}`;
 
               return `${priceStr} | ${title}`;
             },
@@ -291,7 +304,7 @@ function renderUnsoldChart(items) {
           ticks: {
             color: c.tick,
             font: { size: fontSize },
-            callback: (v) => `$${v.toFixed(0)}`,
+            callback: (v) => `${sym}${v.toFixed(0)}`,
           },
           grid: { color: c.grid },
         },

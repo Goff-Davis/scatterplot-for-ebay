@@ -372,6 +372,18 @@ test('extractDate handles non-English sold prefixes and month names', () => {
   );
 });
 
+test('extractDate skips a title leaf that starts with a sold-word but has no parseable date', () => {
+  // invariant — "Sold Out…" title must not shadow the real date caption
+  assert.equal(
+    extractDate(
+      card(
+        '<span>Sold Out - Available Soon</span><span>Sold  14 Jun 2026</span>',
+      ),
+    ),
+    '2026-06-14',
+  );
+});
+
 // ── International: extractPrice £ and EUR formats ────────────────────────────
 
 test('extractPrice reads £ prices (UK)', () => {
@@ -403,6 +415,40 @@ test('extractPrice reads $C prices (Canada French)', () => {
   );
 });
 
+test('extractPrice detects currency symbol from price element text', () => {
+  // invariant
+  assert.equal(extractPrice(card('<span>£15.99</span>')).currencySymbol, '£');
+  assert.equal(
+    extractPrice(card('<span>EUR 12,40</span>')).currencySymbol,
+    '€',
+  );
+  assert.equal(
+    extractPrice(card('<span>29,01 EUR</span>')).currencySymbol,
+    '€',
+  );
+  assert.equal(
+    extractPrice(card('<span>C $29.98</span>')).currencySymbol,
+    'C$',
+  );
+  assert.equal(
+    extractPrice(card('<span>22,57 $C</span>')).currencySymbol,
+    'C$',
+  );
+  assert.equal(
+    extractPrice(card('<span>AU $33.46</span>')).currencySymbol,
+    'AU$',
+  );
+  assert.equal(
+    extractPrice(card('<span>MXN $310.12</span>')).currencySymbol,
+    'MXN$',
+  );
+  assert.equal(extractPrice(card('<span>$107.94</span>')).currencySymbol, '$');
+  assert.equal(
+    extractPrice(card('<span>US $107.94</span>')).currencySymbol,
+    '$',
+  );
+});
+
 test('extractPrice adds EUR shipping to price (DE/IT pattern)', () => {
   // invariant
   const d = extractPrice(
@@ -427,6 +473,7 @@ test('markup-canary: AU_SOLD — AU$ day-first date, split delivery', () => {
   assert.equal(d.date, '2026-06-14');
   assert.equal(d.type, 'sold');
   assert.ok(Math.abs(d.price - 46.0) < 0.005, `got ${d.price}`);
+  assert.equal(d.currencySymbol, 'AU$');
 });
 
 test('markup-canary: UK_SOLD — £ price, split +£1.55 delivery span', () => {
@@ -435,6 +482,7 @@ test('markup-canary: UK_SOLD — £ price, split +£1.55 delivery span', () => {
   assert.equal(d.date, '2026-06-14');
   assert.equal(d.type, 'sold');
   assert.ok(Math.abs(d.price - 17.54) < 0.005, `got ${d.price}`);
+  assert.equal(d.currencySymbol, '£');
 });
 
 test('markup-canary: CA_EN_SOLD — C$ prefix price, day-first date', () => {
@@ -443,6 +491,7 @@ test('markup-canary: CA_EN_SOLD — C$ prefix price, day-first date', () => {
   assert.equal(d.date, '2026-06-14');
   assert.equal(d.type, 'sold');
   assert.ok(Math.abs(d.price - 41.21) < 0.005, `got ${d.price}`);
+  assert.equal(d.currencySymbol, 'C$');
 });
 
 test('markup-canary: CA_FR_SOLD — $C suffix price, Vendu french date, expédition shipping', () => {
@@ -451,6 +500,7 @@ test('markup-canary: CA_FR_SOLD — $C suffix price, Vendu french date, expédit
   assert.equal(d.date, '2026-06-13');
   assert.equal(d.type, 'sold');
   assert.ok(Math.abs(d.price - 42.19) < 0.005, `got ${d.price}`);
+  assert.equal(d.currencySymbol, 'C$');
 });
 
 test('markup-canary: FR_SOLD — EUR suffix, Vendu le + mai, free shipping', () => {
@@ -459,6 +509,7 @@ test('markup-canary: FR_SOLD — EUR suffix, Vendu le + mai, free shipping', () 
   assert.equal(d.date, '2026-05-08');
   assert.equal(d.type, 'sold');
   assert.ok(Math.abs(d.price - 6.0) < 0.005, `got ${d.price}`);
+  assert.equal(d.currencySymbol, '€');
 });
 
 test('markup-canary: IT_GIU_SOLD — EUR prefix, Venduti + giu., "SPEDIZIONE GRATUITA" in title ignored', () => {
@@ -467,6 +518,7 @@ test('markup-canary: IT_GIU_SOLD — EUR prefix, Venduti + giu., "SPEDIZIONE GRA
   assert.equal(d.date, '2026-06-11');
   assert.equal(d.type, 'sold');
   assert.ok(Math.abs(d.price - 27.51) < 0.005, `got ${d.price}`);
+  assert.equal(d.currencySymbol, '€');
 });
 
 test('markup-canary: IT_MAGG_SOLD — Venduti + magg. (maggio fix), EUR prefix', () => {
@@ -475,6 +527,7 @@ test('markup-canary: IT_MAGG_SOLD — Venduti + magg. (maggio fix), EUR prefix',
   assert.equal(d.date, '2026-05-31');
   assert.equal(d.type, 'sold');
   assert.ok(Math.abs(d.price - 27.92) < 0.005, `got ${d.price}`);
+  assert.equal(d.currencySymbol, '€');
 });
 
 test('markup-canary: DE_SOLD — EUR prefix, Verkauft + period-day, Lieferung shipping', () => {
@@ -483,6 +536,7 @@ test('markup-canary: DE_SOLD — EUR prefix, Verkauft + period-day, Lieferung sh
   assert.equal(d.date, '2026-06-13');
   assert.equal(d.type, 'sold');
   assert.ok(Math.abs(d.price - 10.7) < 0.005, `got ${d.price}`);
+  assert.equal(d.currencySymbol, '€');
 });
 
 test('markup-canary: ES_SOLD — EUR suffix, Vendidos, envío shipping', () => {
@@ -491,6 +545,7 @@ test('markup-canary: ES_SOLD — EUR suffix, Vendidos, envío shipping', () => {
   assert.equal(d.date, '2026-06-14');
   assert.equal(d.type, 'sold');
   assert.ok(Math.abs(d.price - 39.76) < 0.005, `got ${d.price}`);
+  assert.equal(d.currencySymbol, '€');
 });
 
 test('markup-canary: MX_EN_SOLD — MXN$ prefix, month-first date', () => {
@@ -499,6 +554,7 @@ test('markup-canary: MX_EN_SOLD — MXN$ prefix, month-first date', () => {
   assert.equal(d.date, '2026-06-14');
   assert.equal(d.type, 'sold');
   assert.ok(Math.abs(d.price - 1219.28) < 0.005, `got ${d.price}`);
+  assert.equal(d.currencySymbol, 'MXN$');
 });
 
 test('markup-canary: MX_ES_SOLD — MXN$ + NBSP thousands, Vendido, envío shipping', () => {
@@ -508,6 +564,7 @@ test('markup-canary: MX_ES_SOLD — MXN$ + NBSP thousands, Vendido, envío shipp
   assert.equal(d.type, 'sold');
   assert.ok(Math.abs(d.price - 3849.26) < 0.005, `got ${d.price}`);
   assert.equal(d.priceHigh, undefined);
+  assert.equal(d.currencySymbol, 'MXN$');
 });
 
 // ── markup-canary: real captured eBay cards ──────────────────────────────────
