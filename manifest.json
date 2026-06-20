@@ -3,7 +3,7 @@
   "name": "Scatterplot for eBay",
   "version": "1.0.0",
 
-  "description": "Creates a scatterplot of times and prices of selected eBay listings.",
+  "description": "Add a price chart to eBay search pages - plot sold listings by sale date and active listings by price to spot trends and deals.",
 
   "icons": {
     "16": "icons/scatterplot-16.png",
