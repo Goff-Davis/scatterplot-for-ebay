@@ -15,7 +15,7 @@
 
   "browser_specific_settings": {
     "gecko": {
-      "id": "scatterplot-for-ebay@davisgoff.com",
+      "id": "scatterplot_for_ebay@davisgoff.com",
       "data_collection_permissions": {
         "required": ["none"]
       },
