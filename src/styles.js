@@ -90,6 +90,13 @@ function injectStyles() {
       border: 1px solid var(--scatter-border); cursor: default;
     }
     #ebay-scatter-font-size:focus { outline: 1px solid var(--scatter-accent-solid); }
+    #ebay-scatter-currency {
+      padding: 1px 3px; border-radius: 3px;
+      font-size: 0.875em; font-family: inherit;
+      background: var(--scatter-btn-bg); color: var(--scatter-btn-text);
+      border: 1px solid var(--scatter-border); cursor: pointer;
+    }
+    #ebay-scatter-currency:focus { outline: 1px solid var(--scatter-accent-solid); }
     .ebay-scatter-body {
       display: flex; flex: 1; min-height: 0; flex-direction: column;
     }

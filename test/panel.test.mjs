@@ -15,6 +15,7 @@ const ALL_FILES = [
   'constants.js',
   'storage.js',
   'extract.js',
+  'currency.js',
   'chart.js',
   'dock.js',
   'checkboxes.js',
@@ -28,6 +29,7 @@ const fresh = () => {
     setup(sb) {
       Chart = makeChartStub();
       sb.window.Chart = Chart;
+      sb.EasyCurrencies = {};
       // getComputedStyle is a window method not in the default vm sandbox;
       // chart.js needs it when the panel element exists in the DOM.
       sb.getComputedStyle = sb.window.getComputedStyle.bind(sb.window);

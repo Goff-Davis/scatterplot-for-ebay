@@ -33,10 +33,12 @@
       ],
       "js": [
         "vendor/chart.js/chart.umd.min.js",
+        "vendor/easy-currencies/easy-currencies.iife.js",
         "src/constants.js",
         "src/storage.js",
         "src/extract.js",
         "src/styles.js",
+        "src/currency.js",
         "src/chart.js",
         "src/dock.js",
         "src/checkboxes.js",
@@ -44,5 +46,7 @@
         "src/init.js"
       ]
     }
-  ]
+  ],
+
+  "host_permissions": ["https://api.exchangerate-api.com/*"]
 }

@@ -92,7 +92,7 @@ function injectCheckbox(card, savedItemsMap) {
 
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
-      renderChart(loadItems());
+      renderChartConverted(loadItems());
       syncPlotAll();
     }, 150);
   });
@@ -185,7 +185,7 @@ function buildPlotAllControl(listContainer) {
       saveItems(items);
       openPanel();
       reconcileCheckboxes(); // honor the MAX_ITEMS cap so boxes match storage
-      renderChart(loadItems());
+      renderChartConverted(loadItems());
       syncPlotAll();
     } else {
       // Only remove items visible on this page — items from other pages/types stay.
@@ -194,13 +194,14 @@ function buildPlotAllControl(listContainer) {
           (box) => `${box.dataset.itemId}:${box.dataset.itemType || 'sold'}`,
         ),
       );
+
       saveItems(
         loadItems().filter((i) => !pageKeys.has(`${i.id}:${i.type || 'sold'}`)),
       );
       document.querySelectorAll('.ebay-scatter-cb input').forEach((box) => {
         box.checked = false;
       });
-      renderChart(loadItems());
+      renderChartConverted(loadItems());
       syncPlotAll();
     }
   });

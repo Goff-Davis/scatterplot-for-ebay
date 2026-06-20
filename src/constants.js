@@ -6,3 +6,4 @@ const SNAP_THRESHOLD = 80;
 const PANEL_OPEN_KEY = 'ebay_scatterplot_panel_open';
 const THEME_KEY = 'ebay_scatterplot_theme';
 const FONT_SIZE_KEY = 'ebay_scatterplot_fontsize';
+const CURRENCY_KEY = 'ebay_scatterplot_currency';

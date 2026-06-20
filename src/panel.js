@@ -6,6 +6,14 @@ function buildPanel() {
       <h2>Price History</h2>
       <span class="ebay-scatter-header-actions">
         <input type="number" id="ebay-scatter-font-size" min="10" max="28" step="1" title="Font size (px)" aria-label="Font size (px)">
+        <select id="ebay-scatter-currency" title="Display currency" aria-label="Display currency">
+          <option value="USD">$ USD</option>
+          <option value="GBP">£ GBP</option>
+          <option value="EUR">€ EUR</option>
+          <option value="CAD">C$ CAD</option>
+          <option value="AUD">AU$ AUD</option>
+          <option value="MXN">MXN$ MXN</option>
+        </select>
         <button id="ebay-scatter-theme" title="Toggle light/dark" aria-label="Switch to light mode"></button>
         <button id="ebay-scatter-close" title="Close">&times;</button>
       </span>
@@ -139,7 +147,7 @@ function buildPanel() {
       chartInstanceUnsold = null;
     }
 
-    renderChart(loadItems());
+    renderChartConverted(loadItems());
   });
 
   const fsInput = document.getElementById('ebay-scatter-font-size');
@@ -159,6 +167,18 @@ function buildPanel() {
   });
   fsInput.addEventListener('blur', () => {
     fsInput.value = parseInt(panel.style.fontSize, 10) || 14;
+  });
+
+  const currencySelect = document.getElementById('ebay-scatter-currency');
+  currencySelect.value = getSelectedCurrencyCode();
+  currencySelect.addEventListener('change', () => {
+    try {
+      localStorage.setItem(CURRENCY_KEY, currencySelect.value);
+    } catch {
+      /* non-fatal */
+    }
+
+    renderChartConverted(loadItems());
   });
 
   // ── Resize ──────────────────────────────────────────────────────────────────
@@ -207,7 +227,7 @@ function buildPanel() {
     dragOffsetY = 0;
 
   header.addEventListener('mousedown', (e) => {
-    if (e.target.closest('button, input')) {
+    if (e.target.closest('button, input, select')) {
       return;
     }
 

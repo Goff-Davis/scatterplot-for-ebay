@@ -8,7 +8,7 @@ This is a Firefox browser extension that adds a price history panel to eBay sear
 
 The extension is declared as a **content script** in `manifest.json`, registered for eBay search-result pages (URLs under `/sch/`) across all supported domains: `ebay.com` (US and Mexico), `ebay.co.uk` (UK), `ebay.de` (Germany), `ebay.ca` (Canada), `ebay.com.au` (Australia and New Zealand), `ebay.fr` (France), `ebay.it` (Italy), and `ebay.es` (Spain). It runs on all matching pages — there is no URL guard. The panel starts minimized by default (only the 📈 toggle tab is visible) and opens on first interaction. Once opened, that state is stored in `localStorage` and restored on the next page load if saved data exists; closing the panel with × clears the flag.
 
-The extension's own code has no build step — Firefox loads the `src/` files directly, in the order listed in `manifest.json`, with no bundler or transpiler. The one third-party library it ships, Chart.js, is _vendored_ (copied into `vendor/`) so it travels with the extension; see _Dependencies and vendoring_ below. Packaging the whole thing into a distributable `.zip` is done with `web-ext` (`npm run build`).
+The extension's own code has no build step — Firefox loads the `src/` files directly, in the order listed in `manifest.json`, with no bundler or transpiler. The third-party libraries it ships (Chart.js and easy-currencies) are _vendored_ into `vendor/` so they travel with the extension; see _Dependencies and vendoring_ below. Packaging the whole thing into a distributable `.zip` is done with `web-ext` (`npm run build`).
 
 ## File structure
 
@@ -16,15 +16,17 @@ The extension's own code has no build step — Firefox loads the `src/` files di
 manifest.json          Extension declaration (lists the scripts to inject)
 package.json           npm metadata, scripts, and dependencies
 scripts/
-  vendor.mjs           Copies Chart.js from node_modules/ into vendor/
+  vendor.mjs           Copies Chart.js and bundles easy-currencies into vendor/
 vendor/
   chart.js/            Vendored Chart.js — loaded before the extension code, and shipped
+  easy-currencies/     Bundled easy-currencies IIFE — exposes window.EasyCurrencies, shipped
 src/
-  constants.js         Shared constants
+  constants.js         Shared constants (including CURRENCY_KEY)
   storage.js           Read/write items to localStorage
   extract.js           Parse item data from the eBay DOM
   styles.js            Inject all CSS into the page
-  chart.js             Manage the Chart.js instance
+  currency.js          Currency maps, locale detection, rate fetching, price conversion
+  chart.js             Manage the Chart.js instance; renderChartConverted is the async entry point
   dock.js              Track and change which edge the panel is docked to
   checkboxes.js        Per-item checkboxes, "Plot all" control
   panel.js             Build the panel DOM and handle all mouse interaction
@@ -50,7 +52,7 @@ All `src/` files are loaded as classic (non-module) content scripts into the sam
 
 The panel (`#ebay-scatter-panel`) is a fixed-position overlay injected into the page. It has four sections:
 
-1. **Header** — "Price History" title, a font-size input, a dark/light theme toggle, and a close button. The header is the drag handle (mousedown on any of its buttons/input is excluded from drag logic).
+1. **Header** — "Price History" title, a font-size input, a currency-selector dropdown, a dark/light theme toggle, and a close button. The header is the drag handle (mousedown on any of its buttons, inputs, or selects is excluded from drag logic).
 2. **Controls bar** — "Clear All" button and an item count.
 3. **Chart area** — two stacked `<canvas>` sections: `#ebay-scatter-sold-wrap` (sold listings) and `#ebay-scatter-unsold-wrap` (active listings). Each section is hidden until it has data.
 4. **Resize handle** — an invisible 6px strip on the panel's free edge.
@@ -75,6 +77,10 @@ For the toggle button, the detach (removing dock classes and pinning inline posi
 ## Resizing
 
 The resize handle sits on the panel's free edge (the edge facing the page content). Dragging it inward expands the panel; dragging outward contracts it. The chart re-renders immediately during the drag. Switching dock sides resets the panel to its default size.
+
+## Currency conversion
+
+A `<select>` in the panel header lets the user pick a display currency (USD, GBP, EUR, CAD, AUD, MXN). The selected currency is persisted in `localStorage` under `CURRENCY_KEY` and defaults to the eBay site's native currency (detected from `window.location.hostname`). On change, `renderChartConverted` fetches live rates via `window.EasyCurrencies` (bundled from the `easy-currencies` package), converts each item's `price` and `priceHigh` using the formula `price * (rates[toCode] / rates[fromCode])`, and re-renders both charts. Rates are cached in memory for one hour. On a network failure, the initial face-value render shown synchronously is left in place with no crash.
 
 ## Theme and font size
 
@@ -120,6 +126,8 @@ The panel contains two independent chart sections, each visible only when items 
 
 Both charts use an inline `rangeLinesPlugin` that draws a vertical line through any data point with a `priceHigh` value (range-priced listings). Both update in place rather than destroying and recreating. `chartInstance` (sold) and `chartInstanceUnsold` (active) are both in `src/chart.js` and referenced by `src/dock.js` and `src/panel.js` for resize handling.
 
+The standard chart entry point for UI event handlers is `renderChartConverted(items)` — it calls `renderChart(items)` synchronously for immediate feedback, then fetches exchange rates asynchronously and re-renders with converted prices. Only `clearAll()` calls `renderChart([])` directly (no network hit for an empty array).
+
 ## Handling eBay's dynamic page updates
 
 As you scroll, eBay appends new listing cards to `ul.srp-results` without a full page reload (infinite scroll). A single `MutationObserver` on that element watches for child-list changes; on each one it re-scans the direct `<li>` children that haven't been processed yet and injects checkboxes. The same pass retries any listing card whose price or date rendered late.
@@ -128,15 +136,18 @@ Filtering, sorting, and pagination on the sold-search page trigger full page nav
 
 ## Dependencies and vendoring
 
-The extension ships exactly one third-party file: **Chart.js**. It's installed via npm and loaded as a content script (listed in `manifest.json` before the `src/` files, so `window.Chart` is available synchronously). eBay's Content Security Policy blocks loading scripts from a CDN, so Chart.js has to travel inside the extension.
+The extension ships two third-party libraries. eBay's Content Security Policy blocks loading scripts from a CDN, so both have to travel inside the extension. Neither is referenced from `node_modules/` in the packaged add-on; instead, `scripts/vendor.mjs` (run on `npm install` postinstall and before `npm run build`) puts them into `vendor/`:
 
-Rather than point the manifest at `node_modules/` (which isn't part of a packaged add-on), a small script — `scripts/vendor.mjs` — copies Chart.js and its license from `node_modules/` into `vendor/chart.js/`, and the manifest loads `vendor/chart.js/chart.umd.min.js`. Vendoring runs automatically on `npm install` (a `postinstall` hook) and again before every `npm run build`, so `vendor/` always matches the installed version.
+- **Chart.js** — file-copied directly into `vendor/chart.js/`. Loaded first in `manifest.json` so `window.Chart` is available synchronously.
+- **easy-currencies** — a CJS/Node package that uses axios and cannot be loaded as a content script directly. `scripts/vendor.mjs` bundles it via esbuild (`platform: 'browser'`, `format: 'iife'`, `globalName: 'EasyCurrencies'`) into `vendor/easy-currencies/easy-currencies.iife.js`, which exposes `window.EasyCurrencies`. `platform: 'browser'` causes esbuild to resolve axios's browser field automatically.
 
-| Dependency | Type    | Purpose                                                  |
-| ---------- | ------- | -------------------------------------------------------- |
-| `chart.js` | runtime | Scatterplot rendering (vendored into `vendor/`, shipped) |
-| `web-ext`  | dev     | Lint, build, and sign the extension for Firefox Add-ons  |
-| `jsdom`    | dev     | DOM implementation used by the unit tests                |
+| Dependency        | Type    | Purpose                                                         |
+| ----------------- | ------- | --------------------------------------------------------------- |
+| `chart.js`        | runtime | Scatterplot rendering (vendored into `vendor/`, shipped)        |
+| `easy-currencies` | runtime | Live exchange rates for currency conversion (vendored, shipped) |
+| `esbuild`         | dev     | Bundles easy-currencies into a browser IIFE during vendor step  |
+| `web-ext`         | dev     | Lint, build, and sign the extension for Firefox Add-ons         |
+| `jsdom`           | dev     | DOM implementation used by the unit tests                       |
 
 ## Building and packaging
 

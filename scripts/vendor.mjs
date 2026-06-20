@@ -5,6 +5,7 @@
 // the extension actually loads, plus the library's license for MIT compliance.
 import { mkdirSync, copyFileSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { buildSync } from 'esbuild';
 
 const files = [
   [
@@ -19,3 +20,17 @@ for (const [src, dest] of files) {
   copyFileSync(src, dest);
   console.log(`vendored ${src} -> ${dest}`);
 }
+
+buildSync({
+  entryPoints: ['node_modules/easy-currencies/dist/index.js'],
+  bundle: true,
+  platform: 'browser',
+  format: 'iife',
+  globalName: 'EasyCurrencies',
+  outfile: 'vendor/easy-currencies/easy-currencies.iife.js',
+  minify: false,
+});
+
+console.log(
+  'bundled easy-currencies -> vendor/easy-currencies/easy-currencies.iife.js',
+);

@@ -120,8 +120,19 @@ function renderSoldChart(items) {
   );
 
   if (chartInstance) {
+    const sym = currencySymbolFor(items);
     chartInstance.data.datasets[0].data = data;
     chartInstance.options.scales.y.suggestedMax = yMax * 1.025;
+    chartInstance.options.scales.y.ticks.callback = (v) =>
+      `${sym}${v.toFixed(0)}`;
+    chartInstance.options.plugins.tooltip.callbacks.label = (ctx) => {
+      const { title, date, y, priceHigh } = ctx.raw;
+      const priceStr =
+        priceHigh !== undefined
+          ? `${sym}${y.toFixed(2)}–${sym}${priceHigh.toFixed(2)}`
+          : `${sym}${y.toFixed(2)}`;
+      return `${priceStr} | ${date} | ${title}`;
+    };
     chartInstance.update();
 
     return;
@@ -239,12 +250,23 @@ function renderUnsoldChart(items) {
   const hoverRadii = data.map((pt) => (pt.priceHigh !== undefined ? 0 : 7));
 
   if (chartInstanceUnsold) {
+    const sym = currencySymbolFor(items);
     chartInstanceUnsold.data.datasets[0].data = data;
     chartInstanceUnsold.data.datasets[0].pointRadius = radii;
     chartInstanceUnsold.data.datasets[0].pointHoverRadius = hoverRadii;
     chartInstanceUnsold.options.scales.x.min = xMin;
     chartInstanceUnsold.options.scales.x.max = xMax;
     chartInstanceUnsold.options.scales.y.suggestedMax = yMax * 1.025;
+    chartInstanceUnsold.options.scales.y.ticks.callback = (v) =>
+      `${sym}${v.toFixed(0)}`;
+    chartInstanceUnsold.options.plugins.tooltip.callbacks.label = (ctx) => {
+      const { title, y, priceHigh } = ctx.raw;
+      const priceStr =
+        priceHigh !== undefined
+          ? `${sym}${y.toFixed(2)}–${sym}${priceHigh.toFixed(2)}`
+          : `${sym}${y.toFixed(2)}`;
+      return `${priceStr} | ${title}`;
+    };
     chartInstanceUnsold.update();
 
     return;
@@ -312,6 +334,37 @@ function renderUnsoldChart(items) {
     },
     plugins: [rangeLinesPlugin],
   });
+}
+
+async function renderChartConverted(items) {
+  renderChart(items);
+
+  try {
+    const toCode = getSelectedCurrencyCode();
+    const rates = await fetchRates();
+    const toSym = CODE_TO_SYMBOL[toCode] || toCode;
+    const converted = items.map((item) => {
+      const c = {
+        ...item,
+        price: convertPrice(item.price, item.currencySymbol, toCode, rates),
+        currencySymbol: toSym,
+      };
+
+      if (item.priceHigh !== undefined) {
+        c.priceHigh = convertPrice(
+          item.priceHigh,
+          item.currencySymbol,
+          toCode,
+          rates,
+        );
+      }
+
+      return c;
+    });
+    renderChart(converted);
+  } catch {
+    /* fetch failed or currency module absent; initial render already shown */
+  }
 }
 
 function updateChartFontSizes(size) {

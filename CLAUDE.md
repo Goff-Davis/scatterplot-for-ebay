@@ -12,7 +12,10 @@ Firefox browser extension (Manifest V3) that injects a scatterplot panel into eB
 npm install          # installs Chart.js + web-ext; postinstall vendors Chart.js into vendor/
 ```
 
-The extension's own source (`src/*.js`) is loaded as-is — no bundler or transpiler. Chart.js is the one third-party file the extension ships; `scripts/vendor.mjs` copies it (and its license) from `node_modules/` into `vendor/chart.js/` so the packaged XPI never references `node_modules/`. The vendor step runs automatically on `npm install` (postinstall) and before `npm run build`.
+The extension's own source (`src/*.js`) is loaded as-is — no bundler or transpiler. Third-party libraries are vendored via `scripts/vendor.mjs` (runs on `npm install` postinstall and before `npm run build`) so the packaged XPI never references `node_modules/`:
+
+- **Chart.js** — file-copied directly into `vendor/chart.js/`
+- **easy-currencies** — CJS/Node package (uses axios); cannot be loaded as a content script directly, so bundled via esbuild into a browser IIFE at `vendor/easy-currencies/easy-currencies.iife.js` exposing `window.EasyCurrencies`. `platform: 'browser'` in the esbuild config resolves axios's browser field automatically.
 
 Load the extension in Firefox for development:
 
@@ -60,7 +63,7 @@ Key conventions:
 - **Summed prices are floats** (`item + shipping`), so assert them with a tolerance, never a hand-rounded literal.
 - **`extractPrice` returns `{ price, priceHigh? }` or `null`** — `priceHigh` is set for range-priced listings (e.g. `$8.99 to $18.99`).
 - **Best-offer/strikethrough**: jsdom's `getComputedStyle` reflects inline styles but not class-based stylesheet rules, so the best-offer fixture carries an inline `text-decoration: line-through` (the live page uses a CSS class); `extractPrice` then correctly returns `null`.
-- **Browser globals are absent from the vm sandbox by default** — only `window`, `document`, `localStorage`, and `console` are wired. Any code path that calls other globals must add them in `setup` (e.g. `sb.getComputedStyle = sb.window.getComputedStyle.bind(sb.window)`). Specifically: `renderSoldChart`/`renderUnsoldChart` need `getComputedStyle` (via `getChartColors()`); `injectCheckbox`'s `change` handler needs `clearTimeout`, `setTimeout`, and a stubbed `renderChart`. Missing globals throw `ReferenceError` — but jsdom catches errors thrown inside event listeners and prints them without failing the test, so the suite can show green with noisy output. Wire the globals to silence it.
+- **Browser globals are absent from the vm sandbox by default** — only `window`, `document`, `localStorage`, and `console` are wired. Any code path that calls other globals must add them in `setup` (e.g. `sb.getComputedStyle = sb.window.getComputedStyle.bind(sb.window)`). Specifically: `renderSoldChart`/`renderUnsoldChart` need `getComputedStyle` (via `getChartColors()`); `injectCheckbox`'s `change` handler needs `clearTimeout`, `setTimeout`, and a stubbed `renderChart`; loading `currency.js` requires `sb.EasyCurrencies = {}` (referenced at module load time). Bare `location` is not a global in the vm sandbox — source code must use `window.location.hostname`, not `location.hostname`. Missing globals throw `ReferenceError` — but jsdom catches errors thrown inside event listeners and prints them without failing the test, so the suite can show green with noisy output. Wire the globals to silence it.
 
 ## Architecture
 
@@ -68,11 +71,12 @@ Content scripts in `src/` are loaded sequentially by the manifest. All files sha
 
 **Source files (load order matches manifest):**
 
-- `src/constants.js` — eight `const` values: `RESULTS_SEL`, `STORAGE_KEY`, `MAX_ITEMS`, `DOCK_KEY`, `SNAP_THRESHOLD`, `PANEL_OPEN_KEY`, `THEME_KEY`, `FONT_SIZE_KEY`
+- `src/constants.js` — nine `const` values: `RESULTS_SEL`, `STORAGE_KEY`, `MAX_ITEMS`, `DOCK_KEY`, `SNAP_THRESHOLD`, `PANEL_OPEN_KEY`, `THEME_KEY`, `FONT_SIZE_KEY`, `CURRENCY_KEY`
 - `src/storage.js` — `loadItems`, `saveItems` (localStorage, 200-item cap)
 - `src/extract.js` — content-based DOM extraction: `leafElements`, `extractItemId`, `extractTitle`, `parseAmount`, `extractPrice`, `extractDate`, `extractItemData`
 - `src/styles.js` — `injectStyles` (injects a `<style>` tag with all extension CSS)
-- `src/chart.js` — `let chartInstance`, `let chartInstanceUnsold`, `renderChart`, `renderSoldChart`, `renderUnsoldChart`, `rangeLinesPlugin`, `updateChartFontSizes`
+- `src/currency.js` — `SYMBOL_TO_CODE`, `CODE_TO_SYMBOL`, `TLD_TO_CODE`, `ALL_CURRENCY_CODES`; `getDefaultCurrencyCode` (TLD → currency code via `window.location.hostname`), `getSelectedCurrencyCode` (localStorage + default), `fetchRates` (1-hour in-memory cache via `window.EasyCurrencies`), `convertPrice`
+- `src/chart.js` — `let chartInstance`, `let chartInstanceUnsold`, `renderChart`, `renderChartConverted` (async: renders face-value immediately, then re-renders with converted prices; all UI event handlers call this instead of `renderChart` — only `clearAll` calls `renderChart([])` directly), `renderSoldChart`, `renderUnsoldChart`, `rangeLinesPlugin`, `updateChartFontSizes`
 - `src/dock.js` — `let dockSide`, `nearestEdge`, `setDockSide`
 - `src/checkboxes.js` — `let debounceTimer`, `cardData` WeakMap, `openPanel`, `injectCheckbox`, `clearAll`, `reconcileCheckboxes`, `syncPlotAll`, `buildPlotAllControl`
 - `src/panel.js` — `buildPanel` (DOM construction + all mouse interaction)
@@ -99,7 +103,7 @@ Content scripts in `src/` are loaded sequentially by the manifest. All files sha
 
 **Font sizing:** The panel base font-size is set via `panel.style.fontSize` (inline style) so it survives `setDockSide`'s style-clearing. Child CSS font-sizes use `em` units so they scale with the base — never add a hardcoded `px` font-size inside `#ebay-scatter-panel`. Chart.js axes/tooltips do **not** inherit CSS font-size; they need explicit `font: { size }` on tick options and `bodyFont: { size }` on tooltip options. `updateChartFontSizes(size)` in `src/chart.js` patches both live chart instances.
 
-**Header drag guard:** The header `mousedown` handler skips drag logic when `e.target.closest('button, input')` is truthy. Any new interactive element added to the header must be included in this selector, or clicks will trigger drag logic and can pin/reset panel dimensions.
+**Header drag guard:** The header `mousedown` handler skips drag logic when `e.target.closest('button, input, select')` is truthy. Any new interactive element added to the header must be included in this selector, or clicks will trigger drag logic and can pin/reset panel dimensions.
 
 ## Data extraction
 
@@ -128,6 +132,8 @@ Two separate chart sections are rendered inside the panel, each visible only whe
 **Active listings** (`#ebay-scatter-unsold-wrap`, blue dots): Items sorted by price; x = sequential index centered around 0 (no date meaning — used purely to spread overlapping prices and reveal price clusters). x-axis tick labels are hidden. Range-priced items show only a vertical line (dot suppressed).
 
 Both charts use the `rangeLinesPlugin` (defined in `src/chart.js`) to draw a vertical line through range-priced items (`priceHigh` set). Both update in-place rather than destroying and recreating. Both `chartInstance` and `chartInstanceUnsold` are declared in `src/chart.js` and referenced directly by `src/dock.js` and `src/panel.js`.
+
+**In-place update closure gotcha:** The `if (chartInstance)` early-return paths only patch `.data` and scale options — they do NOT refresh the tick/tooltip callbacks, which close over `sym` (the currency symbol) at chart-creation time. Any feature that changes what those callbacks display must explicitly reassign the callback functions in the in-place update branch, not only in the initial construction block.
 
 ## MutationObserver
 

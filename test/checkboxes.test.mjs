@@ -140,6 +140,7 @@ const freshCross = () =>
       sb.clearTimeout = sb.window.clearTimeout.bind(sb.window);
       sb.setTimeout = sb.window.setTimeout.bind(sb.window);
       sb.renderChart = () => {};
+      sb.renderChartConverted = () => {};
     },
   });
 

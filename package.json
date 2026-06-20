@@ -16,10 +16,12 @@
     "format": "prettier --write ."
   },
   "dependencies": {
-    "chart.js": "^4.5.1"
+    "chart.js": "^4.5.1",
+    "easy-currencies": "^1.8.3"
   },
   "devDependencies": {
     "cross-env": "^10.1.0",
+    "esbuild": "^0.25.0",
     "jsdom": "^29.1.1",
     "prettier": "^3.8.4",
     "web-ext": "^10.3.0"
