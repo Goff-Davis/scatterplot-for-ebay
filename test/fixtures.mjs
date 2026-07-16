@@ -57,3 +57,27 @@ export const BEST_OFFER = read('best-offer-strikethrough.html');
 export const ACTIVE_RANGE_DELIVERY = read('active-range-delivery.html');
 export const ACTIVE_RANGE = read('active-range.html');
 export const ACTIVE_SPLIT_DELIVERY = read('active-split-delivery.html');
+
+// ── Current-layout cards (captured 2026-07; all above are the pre-2026 markup) ──
+// eBay rebuilt the SRP: ul.srp-results → ul.su-grid, and data-listingid moved off
+// the <li> onto an inner div.su-item-card. These four pin the behaviours that
+// change brought. Kept to one per behaviour, per TEST_PLAN.md's "keep few" rule.
+//
+// - new-sold-best-offer: sold + "or Best Offer" (id 278185590765, $160.00 +
+//                        $114.45 delivery → 274.45, bestOffer true). The shown price
+//                        is the LISTING price — eBay no longer says whether an offer
+//                        was accepted, which is exactly why the flag exists.
+// - new-sold-discount:   sold, real price + struck "was" price (id 178228743563,
+//                        $2,299.99 shown / $5,499.99 struck, free delivery → 2299.99,
+//                        NO priceHigh). Strikethrough now means "discounted from",
+//                        not "best offer accepted". Inline text-decoration added —
+//                        the live page uses .strikethrough, which jsdom won't apply.
+// - new-active-range:    range in a SINGLE span (id 187472505512, "$599.99 - $649.99"
+//                        + $81.58 delivery → price 681.57, priceHigh 731.57). The old
+//                        layout split ranges across sibling spans instead.
+// - new-carousel-module: a related-items carousel <li> holding 2 nested listings
+//                        (trimmed from 7). Not a listing → extractItemData null.
+export const NEW_SOLD_BEST_OFFER = read('new-sold-best-offer.html');
+export const NEW_SOLD_DISCOUNT = read('new-sold-discount.html');
+export const NEW_ACTIVE_RANGE = read('new-active-range.html');
+export const NEW_CAROUSEL_MODULE = read('new-carousel-module.html');

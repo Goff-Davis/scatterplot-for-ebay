@@ -25,10 +25,20 @@ function injectCheckbox(card, savedItemsMap) {
     return;
   }
 
-  const id = extractItemId(card);
+  // The <li> is only a grid slot; listingRoot() resolves the element carrying the
+  // listing, and returns null for a carousel/promo module wrapping many of them.
+  const root = listingRoot(card);
 
-  // Not a listing card (ad / promo tile) — mark it so it's never re-checked.
-  if (!id || !card.querySelector("a[href*='/itm/']")) {
+  // Not one listing — mark it so it's never re-checked.
+  if (!root) {
+    card.dataset.scatterInjected = 'skip';
+    return;
+  }
+
+  const id = extractItemId(root);
+
+  // Not a listing card (ad / promo tile) — same.
+  if (!id || !root.querySelector("a[href*='/itm/']")) {
     card.dataset.scatterInjected = 'skip';
     return;
   }
@@ -36,7 +46,7 @@ function injectCheckbox(card, savedItemsMap) {
   // A listing whose price/date may not have rendered yet. Extract once and reuse
   // the result. On failure, leave the card UNMARKED so a later observer pass
   // retries it (handles eBay's lazy rendering).
-  const data = extractItemData(card);
+  const data = extractItemData(card, root);
 
   if (!data) {
     return;
@@ -65,8 +75,21 @@ function injectCheckbox(card, savedItemsMap) {
   label.appendChild(document.createTextNode(' Plot'));
 
   const attrArea =
-    card.querySelector('.su-card-container__attributes__primary') || card;
+    root.querySelector('.su-card-container__attributes__primary') || root;
   attrArea.appendChild(label);
+
+  // eBay shows the LISTING price on a sold Best Offer card and no longer discloses
+  // an accepted offer's amount — or that one happened at all. Only the item page
+  // reveals it, so send the user there rather than let a possibly-wrong price look
+  // authoritative. Active cards are exempt: their price is the asking price, which
+  // is accurate, so there is nothing to go check.
+  if (data.bestOffer && data.type === 'sold') {
+    const warn = document.createElement('div');
+    warn.className = 'ebay-scatter-bo-warn';
+    warn.textContent =
+      '⚠ Best Offer enabled — open the listing to check if a best offer was accepted.';
+    attrArea.appendChild(warn);
+  }
 
   cb.addEventListener('change', () => {
     // Persist immediately, per change. The debounceTimer is shared by every

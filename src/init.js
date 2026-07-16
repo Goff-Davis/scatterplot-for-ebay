@@ -7,11 +7,65 @@ if (localStorage.getItem(PANEL_OPEN_KEY) && loadItems().length > 0) {
   document.getElementById('ebay-scatter-toggle').style.display = 'none';
 }
 
-const container = document.querySelector(RESULTS_SEL);
+// eBay renames the results list's classes periodically (ul.srp-results became
+// ul.su-grid), which silently switches the whole extension off. When the known
+// selectors miss, fall back to whichever <ul> holds the most listing cards.
+function findResultsList() {
+  const direct = document.querySelector(RESULTS_SEL);
+
+  if (direct) {
+    return direct;
+  }
+
+  // Carousel modules nest their own <ul>, so closest('ul') attributes their items
+  // to the carousel rather than the results list — the real list still wins.
+  const counts = new Map();
+
+  for (const el of document.querySelectorAll('[data-listingid]')) {
+    const ul = el.closest('ul');
+
+    if (ul) {
+      counts.set(ul, (counts.get(ul) || 0) + 1);
+    }
+  }
+
+  let best = null;
+  let most = 0;
+
+  for (const [ul, n] of counts) {
+    if (n > most) {
+      best = ul;
+      most = n;
+    }
+  }
+
+  return best;
+}
+
+const container = findResultsList();
 
 if (!container) {
-  document.getElementById('ebay-scatter-status').textContent =
-    'Could not find listings — eBay may have changed its layout';
+  // Report in the placeholder, not #ebay-scatter-status: the status span is a flex
+  // item sharing a 320px row with "Clear All" (a 150px column when docked top/bottom)
+  // and belongs to renderChart's item count, which would overwrite this. The
+  // placeholder is a full-size centred box that already means "nothing to show", so
+  // it has room to wrap and no longer contradicts the error by inviting the user to
+  // check items that have no checkboxes.
+  const placeholder = document.getElementById('ebay-scatter-placeholder');
+  placeholder.textContent = '';
+  placeholder.classList.add('ebay-scatter-error');
+
+  const msg = document.createElement('div');
+  msg.textContent =
+    'Could not find listings — eBay may have changed its layout.';
+
+  const report = document.createElement('a');
+  report.href = 'https://github.com/Goff-Davis/scatterplot-for-ebay/issues';
+  report.target = '_blank';
+  report.rel = 'noreferrer';
+  report.textContent = 'Report it';
+
+  placeholder.append(msg, report);
   console.warn('[ebay-scatter] Results container not found');
 } else {
   const savedItemsMap = new Map(

@@ -24,7 +24,7 @@ src/
   constants.js         Shared constants (including CURRENCY_KEY)
   storage.js           Read/write items to localStorage
   extract.js           Parse item data from the eBay DOM
-  styles.js            Inject all CSS into the page
+  styles.js            Inject all CSS into the page (incl. the Best Offer warning)
   currency.js          Currency maps, locale detection, rate fetching, price conversion
   chart.js             Manage the Chart.js instance; renderChartConverted is the async entry point
   dock.js              Track and change which edge the panel is docked to
@@ -36,8 +36,11 @@ test/
   storage.test.mjs     loadItems/saveItems degradation + MAX_ITEMS cap
   dock.test.mjs        nearestEdge geometry
   chart.test.mjs       renderChart data-shaping math (against a fake Chart)
-  checkboxes.test.mjs  syncPlotAll tri-state, reconcileCheckboxes, injectCheckbox cross-type coexistence
+  checkboxes.test.mjs  syncPlotAll tri-state, reconcileCheckboxes, injectCheckbox cross-type
+                       coexistence, sold-only Best Offer warning
+  currency.test.mjs    convertPrice math + getDefaultCurrencyCode's TLD lookup
   panel.test.mjs       buildPanel wiring: font-size input + dark/light theme toggle
+  init.test.mjs        The startup sequence, incl. the layout-failure message
   helpers/load.mjs     Loads any src/ files into a shared jsdom context for testing
   helpers/chart-stub.mjs  Fake Chart.js constructor that records its config
   fixtures/            Real eBay card HTML (sold + active) used by the tests
@@ -91,14 +94,28 @@ Two header controls adjust the panel's appearance, both persisted in `localStora
 
 ## Data extraction
 
-Rather than relying on eBay's CSS class names (which change frequently), the extension uses content-based heuristics to pull data from each listing card:
+Rather than relying on eBay's CSS class names (which change frequently), the extension uses content-based heuristics to pull data from each listing card.
 
-- **Price** — finds a leaf element whose entire text matches a price in any supported currency: `$X.XX` (US/AU/CA/MX), `£X.XX` (UK), `EUR X,XX` prefix (DE/IT), or `X,XX EUR` suffix (FR/ES). Skips items where that price has a strikethrough style (best-offer accepted). Returns `{ price, priceHigh? }` — `priceHigh` is set when a second non-struck price span is found in the same parent element (range pricing, e.g. `$8.99 to $18.99`). `parseAmount` auto-detects EUR comma-decimal format (exactly two digits after the comma) vs. period-decimal — US thousands commas (`$1,234.56`) always have three or more digits after the comma and are never misread. Mixed currencies appear on every eBay site (e.g. a US seller on `ebay.de` shows `$` prices; a European seller on `ebay.com` shows `EUR` prices); the universal `PRICE_RE` matches all formats, and amounts are plotted at face value with no currency conversion.
+**Finding the card.** eBay rebuilt the search page in mid-2026, and the extension handles both shapes because international sites may still serve the old one. The results list moved from `ul.srp-results` to `ul.su-grid`, and `data-listingid` moved off the `<li>` onto an inner `div.su-item-card` — the `<li>` is now just a grid slot. `listingRoot()` resolves whichever element actually carries the listing, and everything else reads from there. It deliberately returns nothing for an `<li>` holding _several_ listings: the related-items carousels are also `<li>`s in that same list, and treating one as a single card made the item-ID fallback pick up the first item inside the carousel and plot it as if the user had chosen it.
+
+**Finding the list.** A class rename doesn't degrade the extension, it switches it off completely — which is what happened when `srp-results` disappeared. So `findResultsList()` tries the known selectors, then falls back to whichever `<ul>` on the page contains the most listing cards. Carousels nest their own `<ul>`, so their items count toward the carousel rather than the results list, and the real list wins comfortably (60 cards vs. 10 for the nearest runner-up on a captured page).
+
+Per-card heuristics:
+
+- **Price** — finds a leaf element whose entire text matches a price in any supported currency: `$X.XX` (US/AU/CA/MX), `£X.XX` (UK), `EUR X,XX` prefix (DE/IT), or `X,XX EUR` suffix (FR/ES). Returns `{ price, priceHigh? }`. A range is read either from a single span (`$599.99 - $649.99`, the current layout) or from a second non-struck price span in the same parent (`$8.99 to $18.99`, the old one). A struck-through price is skipped: it used to mean an accepted best offer, but now marks a discounted "was" price sitting beside the real one — either way it is not the sale price and not the top of a range. `parseAmount` auto-detects EUR comma-decimal format (exactly two digits after the comma) vs. period-decimal — US thousands commas (`$1,234.56`) always have three or more digits after the comma and are never misread. Mixed currencies appear on every eBay site (e.g. a US seller on `ebay.de` shows `$` prices; a European seller on `ebay.com` shows `EUR` prices); the universal `PRICE_RE` matches all formats, and amounts are plotted at face value with no currency conversion.
 - **Shipping** — finds a leaf element **after the price element in DOM order** containing a multi-language shipping keyword (`delivery`, `shipping`, `postage`, `Versand`, `Lieferung`, `livraison`, `consegna`, `spedizione`, `envío`, `expédition`, etc.) and a currency amount, or a `+<amount>` leaf in any supported currency format (the split-span pattern on active listings). Scanning only post-price leaves prevents false positives when product titles contain free-shipping phrases (e.g. Italian "SPEDIZIONE GRATUITA") — title spans always precede the price in eBay card DOM. Recognises free-shipping phrases in all supported languages as $0.
 - **Date** — finds a leaf element whose text starts with a supported sold prefix (`Sold`, `Verkauft`, `Vendu le`, `Vendu`, `Venduto`, `Venduti`, `Vendido`, `Vendidos`) and parses the date from it. Handles both day-first formats used by most international sites ("14 Jun 2026", "13. Jun 2026", "11 giu. 2026") and the month-first format used by the US/MX English ("Jun 14, 2026") via a `MONTH_MAP` covering English, French, Italian, Spanish, and German month names. The result is stored as `YYYY-MM-DD` via pure string manipulation (no `new Date()` conversion), so the stored day matches what eBay displayed regardless of the user's timezone. Returns `null` for active (unsold) listings which have no sold date.
 - **Item ID** — reads `data-listingid` on the card element, with a fallback to parsing the `/itm/<id>` URL
 
-`extractItemData` returns `null` only for best-offer or unparseable-price items. Items with a sold date get `type: 'sold'`; items without get `type: 'unsold'` and today's local date as a fallback (so they appear in the active-listings chart). Items in localStorage without a `type` field (saved before this field existed) are treated as `'sold'`. Non-listings (ad/promo tiles) are marked and skipped permanently; a real listing card that simply hasn't finished rendering is left unmarked and retried on the next observer pass.
+`extractItemData` returns `null` only for best-offer-accepted (old layout), unparseable-price, or non-listing items. Items with a sold date get `type: 'sold'`; items without get `type: 'unsold'` and today's local date as a fallback (so they appear in the active-listings chart). Items in localStorage without a `type` field (saved before this field existed) are treated as `'sold'`. Non-listings (ad/promo tiles) are marked and skipped permanently; a real listing card that simply hasn't finished rendering is left unmarked and retried on the next observer pass.
+
+## Best Offer, and what the search page won't tell you
+
+Roughly half of all sold listings have Best Offer enabled. When a seller accepts an offer, the item sells for _less_ than the price on the card — but the search page still shows the listing price, and no longer hints that anything happened. The old layout was explicit about it (the price was struck through and captioned "Best offer accepted"), which is why the extension used to skip those items. That signal is gone: there is no strikethrough, no caption, and no embedded data anywhere on the page carrying the real amount. Only the item's own page says so, and checking would mean a request per listing.
+
+So the extension detects what it actually can — that Best Offer was **enabled** — and records it as `bestOffer: true`. That is not the same claim as "an offer was accepted", and the code is careful never to conflate the two. Because half the sold data would otherwise disappear (and many of those items did sell at the asking price), the items are still plotted. Instead, a sold Best Offer card gets a short warning under its Plot checkbox pointing the user at the listing to check the real figure.
+
+Active listings are exempt from the warning. Their price is what the seller is asking, which is accurate as an asking price; opening the listing would reveal nothing new. They still carry the flag.
 
 ## Checkboxes and "Plot all"
 
@@ -130,7 +147,7 @@ The standard chart entry point for UI event handlers is `renderChartConverted(it
 
 ## Handling eBay's dynamic page updates
 
-As you scroll, eBay appends new listing cards to `ul.srp-results` without a full page reload (infinite scroll). A single `MutationObserver` on that element watches for child-list changes; on each one it re-scans the direct `<li>` children that haven't been processed yet and injects checkboxes. The same pass retries any listing card whose price or date rendered late.
+As you scroll, eBay appends new listing cards to the results list without a full page reload (infinite scroll). A single `MutationObserver` on that element watches for child-list changes; on each one it re-scans the direct `<li>` children that haven't been processed yet and injects checkboxes. The same pass retries any listing card whose price or date rendered late.
 
 Filtering, sorting, and pagination on the sold-search page trigger full page navigations rather than in-place DOM swaps, so the extension simply re-initializes. This has been verified for pagination specifically: clicking to the next page reloads the page, and because selections live in `localStorage`, everything already plotted survives the reload and stays on the chart while items from the newly loaded page can be added to the same plot — so you can page through results and accumulate points across multiple pages. No extra observer is needed for in-place list replacement (which eBay was confirmed never to do here).
 
@@ -153,7 +170,8 @@ The extension ships two third-party libraries. eBay's Content Security Policy bl
 
 There's no bundler for the extension's own code, but `web-ext` (Mozilla's tool) handles linting and packaging:
 
-- `npm run lint` — checks the extension against Firefox Add-on policies
+- `npm run lint` — checks the extension against Firefox Add-on policies. It does **not** check code style; that's Prettier's job, via `npm run format`.
+- `npm run format` — Prettier over the repo (`test/fixtures/` and `vendor/` are excluded, so captured markup and vendored libraries stay byte-for-byte as they arrived)
 - `npm run build` — vendors Chart.js, then produces a `.zip` in `web-ext-artifacts/`
 - `npm run sign` — submits to addons.mozilla.org (AMO) as a listed add-on
 
@@ -165,4 +183,4 @@ Unit tests (`npm test`) lock down the core logic that must stay stable regardles
 
 Because the `src/` files have no `export`s (they share one content-script scope), the tests load the real source into a jsdom-backed `node:vm` sandbox and call its functions directly — running the exact code that ships, with no test-only exports. `test/helpers/load.mjs` exposes `loadModules(files, { url, setup })`, which loads any combination of `src/` files into one shared context (separate `runInContext` calls share top-level `const`/`let`, mirroring the content-script scope); chart math is exercised against a fake Chart.js constructor (`test/helpers/chart-stub.mjs`).
 
-Fixtures (`test/fixtures/*.html`) are real listing cards captured from live sold-search **and** active-search pages, then trimmed and made self-contained. The suite is pinned to a positive-offset timezone (`TZ=Australia/Sydney`) so that any regression in the date parsing — which must store the date eBay displayed, not a UTC-shifted one — fails the tests even on machines in the Americas.
+Fixtures (`test/fixtures/*.html`) are real listing cards captured from live sold-search **and** active-search pages, then trimmed and made self-contained. The `new-*.html` set covers the 2026 layout (Best Offer flag, discounted "was" price, single-span range, and a carousel module that must be skipped); the rest are the older markup, kept because international sites may still serve it. Cards with a struck price carry an inline `text-decoration: line-through` — the live page uses a CSS class, and jsdom doesn't apply class-based rules. The suite is pinned to a positive-offset timezone (`TZ=Australia/Sydney`) so that any regression in the date parsing — which must store the date eBay displayed, not a UTC-shifted one — fails the tests even on machines in the Americas.

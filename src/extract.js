@@ -5,6 +5,26 @@ function leafElements(card, sel) {
   );
 }
 
+// Resolves the element that actually carries one listing. In the current layout the
+// <li> is only a grid slot — data-listingid sits on an inner div. A promo/carousel
+// <li> wraps MANY of them, and treating it as a single card makes extractItemId's
+// /itm/ fallback silently return the first nested item, plotting a bogus listing.
+function listingRoot(card) {
+  if (card.dataset.listingid) {
+    return card; // old layout: the <li> itself carries the id
+  }
+
+  const found = card.querySelectorAll('[data-listingid]');
+
+  if (found.length > 1) {
+    return null; // carousel / promo module, not a single listing
+  }
+
+  // found[0] is the current layout. Falling back to the card keeps the old layout
+  // working and preserves the lazy-render retry for a card that hasn't filled in yet.
+  return found[0] || card;
+}
+
 function extractItemId(card) {
   if (card.dataset.listingid) {
     return card.dataset.listingid;
@@ -51,8 +71,33 @@ function parseAmount(text) {
   return pm ? parseFloat(pm[0]) : NaN;
 }
 
-const PRICE_RE =
-  /^(?:(?:[A-Z]{1,3}\s)?\$[\d,  ]+\.?\d*|£[\d,  ]+\.?\d*|EUR\s+[\d.  ]+,\d{2}|[\d.  ]+,\d{2}\s*(?:EUR|\$C))$/;
+// One source of truth for a bare price amount, shared by PRICE_RE and RANGE_RE.
+// The classes carry U+00A0 alongside a plain space: eBay uses both as separators.
+const PRICE_BODY =
+  '(?:[A-Z]{1,3}\\s)?\\$[\\d,\\u00a0 ]+\\.?\\d*' +
+  '|£[\\d,\\u00a0 ]+\\.?\\d*' +
+  '|EUR\\s+[\\d.\\u00a0 ]+,\\d{2}' +
+  '|[\\d.\\u00a0 ]+,\\d{2}\\s*(?:EUR|\\$C)';
+
+const PRICE_RE = new RegExp(`^(?:${PRICE_BODY})$`);
+
+// A range inside ONE element: "$599.99 - $649.99". The old layout split a range
+// across sibling spans instead — extractPrice still handles that separately.
+// The separator carries its own case rather than an `i` flag: the flag would also
+// apply to PRICE_BODY, making a range's endpoints accept `eur 12,40` when PRICE_RE
+// (no flag) rejects it standalone.
+const RANGE_RE = new RegExp(
+  `^(${PRICE_BODY})\\s*(?:-|–|—|[Tt]o)\\s*(${PRICE_BODY})$`,
+);
+
+// Best Offer was ENABLED on this listing. It does NOT mean an offer was accepted:
+// eBay stopped disclosing an accepted offer's amount, or even that one happened, so
+// a sold card shows the LISTING price either way and only the item page reveals the
+// truth. Treat this as "price is uncertain", never as "an offer was accepted".
+// EN/ES/FR/CA-FR are confirmed against fixtures; DE and IT are unverified until an
+// international page on the current layout is captured.
+const BEST_OFFER_RE =
+  /\b(?:or Best Offer|o Mejor oferta|ou Faire une offre|ou Offre directe|oder Preisvorschlag|o Proposta d'acquisto)\b/i;
 
 function detectCurrencySymbol(text) {
   if (/£/.test(text)) {
@@ -75,74 +120,86 @@ function detectCurrencySymbol(text) {
   return '$';
 }
 
+// A struck price is a discounted "was" price on the current layout (it used to mark
+// a best-offer sale). Walks up because the rule may sit on a wrapping row.
+function isStruck(el) {
+  let node = el;
+
+  for (let i = 0; i < 4; i++) {
+    if (!node) {
+      break;
+    }
+
+    if (window.getComputedStyle(node).textDecoration.includes('line-through')) {
+      return true;
+    }
+
+    node = node.parentElement;
+  }
+
+  return false;
+}
+
 function extractPrice(card) {
-  // Find a leaf element whose entire text is a bare price amount.
+  // Find a leaf element whose entire text is a bare price amount or a range.
   const leaves = leafElements(card, 'span, div');
-  const priceEl = leaves.find((el) => {
-    if (!PRICE_RE.test(el.textContent.trim())) {
-      return false;
-    }
-    let node = el;
-
-    for (let i = 0; i < 4; i++) {
-      if (!node) {
-        break;
-      }
-
-      if (
-        window.getComputedStyle(node).textDecoration.includes('line-through')
-      ) {
-        return false;
-      }
-      node = node.parentElement;
-    }
-
-    return true;
-  });
-
-  if (!priceEl) {
-    return null;
-  }
-
-  const low = parseAmount(priceEl.textContent);
-
-  if (isNaN(low)) {
-    return null;
-  }
-
-  // Price range: look for a second non-struck $X.XX sibling in the same parent element
-  // (e.g. "$8.99 to $18.99" on active listings — three spans in one attribute row)
+  let priceEl = null;
+  let low;
   let high;
-  const siblingPrices = Array.from(
-    priceEl.parentElement.querySelectorAll('span, div'),
-  ).filter((el) => {
-    if (el === priceEl || !PRICE_RE.test(el.textContent.trim())) {
-      return false;
-    }
 
-    // Exclude struck-through siblings (discounted original prices on sold cards)
-    let n = el;
+  for (const el of leaves) {
+    const text = el.textContent.trim();
+    const range = RANGE_RE.exec(text);
 
-    for (let i = 0; i < 4; i++) {
-      if (!n) {
-        break;
+    if (range && !isStruck(el)) {
+      priceEl = el;
+      low = parseAmount(range[1]);
+
+      // Same guard as the sibling scan below. A high that isn't above the low would
+      // make the item vanish from the active chart: renderUnsoldChart suppresses the
+      // dot for anything carrying a priceHigh, and the range line would be
+      // zero-length or inverted. Leaving it unset plots a plain dot instead.
+      const h = parseAmount(range[2]);
+
+      if (!isNaN(h) && h > low) {
+        high = h;
       }
 
-      if (window.getComputedStyle(n).textDecoration.includes('line-through')) {
-        return false;
-      }
-
-      n = n.parentElement;
+      break;
     }
 
-    return true;
-  });
+    if (PRICE_RE.test(text) && !isStruck(el)) {
+      priceEl = el;
+      low = parseAmount(text);
+      break;
+    }
+  }
 
-  if (siblingPrices.length > 0) {
-    const h = parseAmount(siblingPrices[siblingPrices.length - 1].textContent);
+  if (!priceEl || isNaN(low)) {
+    return null;
+  }
 
-    if (!isNaN(h) && h > low) {
-      high = h;
+  // Old-layout range: a second non-struck price in a sibling span ("$8.99 to $18.99"
+  // spread across three spans in one attribute row). Restricted to LEAVES — wrapper
+  // divs inherit their descendants' textContent, so an unfiltered scan matches the
+  // discount row's wrappers and mistakes the struck "was" price for a range high.
+  if (high === undefined) {
+    const siblingPrices = leafElements(
+      priceEl.parentElement,
+      'span, div',
+    ).filter(
+      (el) =>
+        el !== priceEl && PRICE_RE.test(el.textContent.trim()) && !isStruck(el),
+    );
+
+    if (siblingPrices.length > 0) {
+      const h = parseAmount(
+        siblingPrices[siblingPrices.length - 1].textContent,
+      );
+
+      if (!isNaN(h) && h > low) {
+        high = h;
+      }
     }
   }
 
@@ -298,15 +355,23 @@ function extractDate(card) {
   return null;
 }
 
-function extractItemData(card) {
-  const id = extractItemId(card);
-  const priceData = extractPrice(card);
+// Every read is scoped to `root`, the element carrying the one listing: a carousel <li>
+// would otherwise leak its first nested item's id/price/title into a record for the
+// module itself. Callers that already resolved it (injectCheckbox) pass it in to save a
+// second lookup; everyone else gets it resolved here.
+function extractItemData(card, root = listingRoot(card)) {
+  if (!root) {
+    return null;
+  }
+
+  const id = extractItemId(root);
+  const priceData = extractPrice(root);
 
   if (!id || !priceData) {
     return null;
   }
 
-  const soldDate = extractDate(card);
+  const soldDate = extractDate(root);
   let date;
 
   if (soldDate) {
@@ -319,7 +384,7 @@ function extractItemData(card) {
 
   const item = {
     id,
-    title: extractTitle(card) || 'Unknown item',
+    title: extractTitle(root) || 'Unknown item',
     date,
     price: priceData.price,
     type: soldDate ? 'sold' : 'unsold',
@@ -328,6 +393,14 @@ function extractItemData(card) {
 
   if (priceData.priceHigh !== undefined) {
     item.priceHigh = priceData.priceHigh;
+  }
+
+  if (
+    leafElements(root, 'span, div').some((el) =>
+      BEST_OFFER_RE.test(el.textContent),
+    )
+  ) {
+    item.bestOffer = true;
   }
 
   return item;

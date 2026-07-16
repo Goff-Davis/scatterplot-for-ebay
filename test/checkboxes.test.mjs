@@ -182,3 +182,116 @@ test('injectCheckbox change handler: cross-type id coexists in storage', () => {
     'checkbox stays checked (no revert from reconcileCheckboxes)',
   );
 });
+
+// ── the sold-only Best Offer warning ──────────────────────────────────────────
+// invariant — synthetic cards, not eBay markup. eBay shows the LISTING price on a
+// sold Best Offer card and no longer says whether an offer was accepted, so the
+// warning sends the user to the item page. Active cards are exempt: their price is
+// the asking price, so there is nothing to go and check.
+
+const soldBoCard = (s, id = 'B1') => {
+  const li = s.document.createElement('li');
+  li.dataset.listingid = id;
+  li.innerHTML =
+    `<a href="/itm/${id}">Item</a><span>Sold  Jan 5, 2026</span>` +
+    '<span>$50.00</span><span>or Best Offer</span>' +
+    '<div class="su-card-container__attributes__primary"></div>';
+  s.document.body.appendChild(li);
+  return li;
+};
+
+const warnsIn = (li) => li.querySelectorAll('.ebay-scatter-bo-warn');
+
+test('injectCheckbox: sold + Best Offer gets exactly one warning, in the attributes area', () => {
+  const s = freshCross();
+  const li = soldBoCard(s);
+
+  s.injectCheckbox(li);
+
+  const warns = warnsIn(li);
+
+  assert.equal(warns.length, 1);
+  assert.equal(
+    warns[0].parentElement.className,
+    'su-card-container__attributes__primary',
+    'warning sits beside the checkbox, not loose on the card',
+  );
+  assert.match(warns[0].textContent, /Best Offer enabled/);
+});
+
+test('injectCheckbox: active + Best Offer gets no warning', () => {
+  // The asking price is accurate — opening the listing would reveal nothing.
+  const s = freshCross();
+  const li = s.document.createElement('li');
+  li.dataset.listingid = 'B2';
+  li.innerHTML =
+    '<a href="/itm/B2">Item</a><span>$50.00</span><span>or Best Offer</span>' +
+    '<div class="su-card-container__attributes__primary"></div>';
+  s.document.body.appendChild(li);
+
+  s.injectCheckbox(li);
+
+  assert.equal(warnsIn(li).length, 0);
+
+  // The flag is still recorded — only the warning is sold-only. (cardData is a
+  // top-level const, so it is not on the sandbox; read it back through storage.)
+  const cb = li.querySelector('.ebay-scatter-cb input');
+  cb.checked = true;
+  cb.dispatchEvent(new s.window.Event('change', { bubbles: true }));
+
+  assert.equal(s.loadItems()[0].bestOffer, true, 'still flagged in storage');
+});
+
+test('injectCheckbox: sold without Best Offer gets no warning', () => {
+  const s = freshCross();
+  const li = s.document.createElement('li');
+  li.dataset.listingid = 'B3';
+  li.innerHTML =
+    '<a href="/itm/B3">Item</a><span>Sold  Jan 5, 2026</span>' +
+    '<span>$50.00</span><span>Buy It Now</span>' +
+    '<div class="su-card-container__attributes__primary"></div>';
+  s.document.body.appendChild(li);
+
+  s.injectCheckbox(li);
+
+  assert.equal(warnsIn(li).length, 0);
+});
+
+test('injectCheckbox: a carousel module gets neither checkbox nor warning', () => {
+  // invariant — a promo <li> wrapping several listings must be skipped outright,
+  // not mined for its first nested item.
+  const s = freshCross();
+  const li = s.document.createElement('li');
+  li.innerHTML =
+    '<div data-listingid="C1"><a href="/itm/C1">a</a><span>$10.00</span>' +
+    '<span>or Best Offer</span></div>' +
+    '<div data-listingid="C2"><a href="/itm/C2">b</a><span>$20.00</span></div>';
+  s.document.body.appendChild(li);
+
+  s.injectCheckbox(li);
+
+  assert.equal(li.querySelectorAll('.ebay-scatter-cb').length, 0);
+  assert.equal(warnsIn(li).length, 0);
+  assert.equal(li.dataset.scatterInjected, 'skip');
+});
+
+test('injectCheckbox: current-layout card with the id on an inner div still works', () => {
+  // invariant — data-listingid moved off the <li> onto div.su-item-card.
+  const s = freshCross();
+  const li = s.document.createElement('li');
+  li.innerHTML =
+    '<div data-listingid="N1"><a href="/itm/N1">Item</a>' +
+    '<span>Sold  Jan 5, 2026</span><span>$50.00</span><span>or Best Offer</span>' +
+    '<div class="su-card-container__attributes__primary"></div></div>';
+  s.document.body.appendChild(li);
+
+  s.injectCheckbox(li);
+
+  assert.equal(li.dataset.scatterInjected, '1');
+  assert.equal(warnsIn(li).length, 1);
+
+  const boxes = li.querySelectorAll('.ebay-scatter-cb input');
+
+  assert.equal(boxes.length, 1);
+  assert.equal(boxes[0].dataset.itemId, 'N1', 'id read from the inner div');
+});

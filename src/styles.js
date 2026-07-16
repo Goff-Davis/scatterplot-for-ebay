@@ -144,6 +144,14 @@ function injectStyles() {
       display: flex; align-items: center; justify-content: center;
       color: var(--scatter-placeholder); text-align: center; padding: 20px;
     }
+    /* Layout-failure message. The box centres with flex, so its two children need a
+       column; overflow-wrap keeps a long word inside the panel rather than spilling
+       onto eBay's page. */
+    #ebay-scatter-placeholder.ebay-scatter-error {
+      flex-direction: column; gap: 8px;
+      color: var(--scatter-subtext); overflow-wrap: anywhere;
+    }
+    #ebay-scatter-placeholder.ebay-scatter-error a { color: var(--scatter-accent-solid); }
     #ebay-scatter-toggle {
       position: fixed; z-index: 2147483646;
       background: var(--scatter-toggle-bg, rgba(24,24,24,0.92));
@@ -212,6 +220,12 @@ function injectStyles() {
       font-size: 12px; color: #555;
     }
     .ebay-scatter-cb input { cursor: pointer; margin: 0; }
+    /* Sits on eBay's own card, not inside #ebay-scatter-panel, so it inherits
+       neither the panel's font-size base nor its theme custom properties. */
+    .ebay-scatter-bo-warn {
+      display: block; max-width: 34em; margin-top: 2px;
+      font-size: 11px; line-height: 1.35; color: #8a6100;
+    }
     #ebay-scatter-plot-all-wrap {
       display: flex; align-items: center; gap: 6px;
       padding: 6px 0 2px; font-size: 13px;

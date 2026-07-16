@@ -12,6 +12,7 @@ Supports all major eBay sites: ebay.com, ebay.co.uk, ebay.de, ebay.ca, ebay.com.
 - **Drag to redock** — drag the panel header or the toggle tab to move the panel to a different edge
 - **Resizable** — drag the panel's free edge to expand or contract it
 - **Currency conversion** — choose a display currency from the panel header; all prices are converted from their original listing currencies using live exchange rates
+- **Best Offer warning** — sold listings that had Best Offer enabled are marked, since eBay shows the asking price, which may not be what the item sold for
 - **Dark / light theme** — toggle in the panel header
 - **Adjustable text size** — set the panel font size from the header
 - **Persists across page loads** — selected items, dock position, panel open/closed state, theme, and font size are saved in `localStorage`
@@ -40,6 +41,8 @@ The extension will remain active until Firefox is closed. Repeat step 4 after re
 
 **Sold vs. active listings:** Sold listings are charted by sale date. Active (unsold) listings appear in a separate "Active Listings" strip chart sorted by price — the x-axis spreads items horizontally so price clusters are visible. Both chart sections appear in the same panel when you have both types selected.
 
+**Best Offer listings:** If a sold listing had Best Offer enabled, a warning appears under its Plot box. eBay shows the seller's asking price on these cards, but if the seller accepted an offer the item actually sold for less — and the search page doesn't say which happened. Open the listing to see the real figure. Active listings don't get the warning: their price is simply what the seller is asking.
+
 **Across pages:** Your selections are saved, so you can move to the next page of results and keep adding listings — the chart accumulates points from every page you visit.
 
 **Moving the panel:** Drag the "Price History" header to any edge of the screen. Release near an edge to snap it there. Close the panel with the × button — a small tab appears to reopen it. The tab can also be dragged to a different edge.
@@ -57,7 +60,9 @@ No build step is needed to develop. After editing any file in `src/`:
 1. Go to `about:debugging#/runtime/this-firefox`
 2. Find the extension and click **Reload**
 
-Run the unit tests with `npm test` (covers extraction, storage, dock geometry, chart math, checkbox state, and panel header wiring).
+Run the unit tests with `npm test` (covers extraction, storage, dock geometry, chart math, currency conversion, checkbox state, panel header wiring, and the startup sequence).
+
+Code style is handled by Prettier — run `npm run format` after editing. `npm run lint` checks the extension against Firefox Add-on policies, not code style.
 
 To package the extension for distribution, run `npm run lint` and `npm run build`.
 

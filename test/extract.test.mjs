@@ -19,6 +19,10 @@ import {
   ES_SOLD,
   MX_EN_SOLD,
   MX_ES_SOLD,
+  NEW_SOLD_BEST_OFFER,
+  NEW_SOLD_DISCOUNT,
+  NEW_ACTIVE_RANGE,
+  NEW_CAROUSEL_MODULE,
 } from './fixtures.mjs';
 
 const x = loadExtract();
@@ -29,6 +33,7 @@ const {
   extractItemId,
   extractTitle,
   extractItemData,
+  listingRoot,
   card,
   parse,
 } = x;
@@ -618,4 +623,169 @@ test('markup-canary: ACTIVE_SPLIT_DELIVERY — active, split-span delivery', () 
   assert.equal(d.type, 'unsold');
   assert.ok(Math.abs(d.price - 16.4) < 0.005, `got ${d.price}`); // 12.50 + 3.90
   assert.equal(d.priceHigh, undefined);
+});
+
+// ── listingRoot (current layout moved data-listingid off the <li>) ────────────
+
+test('listingRoot returns the card itself when the id is on it (old layout)', () => {
+  // invariant
+  const li = card('<a href="/itm/1">x</a>');
+  li.dataset.listingid = '123';
+
+  assert.equal(listingRoot(li), li);
+});
+
+test('listingRoot returns the inner element carrying the id (current layout)', () => {
+  // invariant
+  const li = card('<div data-listingid="123"><a href="/itm/1">x</a></div>');
+
+  assert.equal(listingRoot(li), li.querySelector('[data-listingid]'));
+});
+
+test('listingRoot returns null for a module wrapping several listings', () => {
+  // invariant — a carousel <li> holds many cards; treating it as one makes
+  // extractItemId's /itm/ fallback return the first nested item.
+  const li = card(
+    '<div data-listingid="1"><a href="/itm/1">a</a></div>' +
+      '<div data-listingid="2"><a href="/itm/2">b</a></div>',
+  );
+
+  assert.equal(listingRoot(li), null);
+});
+
+test('listingRoot falls back to the card when no id has rendered yet', () => {
+  // invariant — keeps the observer's lazy-render retry working.
+  const li = card('<a href="/itm/1">x</a>');
+
+  assert.equal(listingRoot(li), li);
+});
+
+// ── single-span ranges (current layout renders "$599.99 - $649.99" as one span) ──
+
+test('extractPrice parses a range inside a single element', () => {
+  // invariant
+  const d = extractPrice(card('<span>$599.99 - $649.99</span>'));
+
+  assert.ok(Math.abs(d.price - 599.99) < 0.005, `got ${d.price}`);
+  assert.ok(Math.abs(d.priceHigh - 649.99) < 0.005, `got ${d.priceHigh}`);
+});
+
+test('extractPrice parses a single-span range with a "to" separator', () => {
+  // invariant
+  const d = extractPrice(card('<span>$8.99 to $18.99</span>'));
+
+  assert.ok(Math.abs(d.price - 8.99) < 0.005, `got ${d.price}`);
+  assert.ok(Math.abs(d.priceHigh - 18.99) < 0.005, `got ${d.priceHigh}`);
+});
+
+test('extractPrice ignores a struck "was" price rather than reading it as a range high', () => {
+  // invariant — the wrapper divs inherit the struck span's textContent, so an
+  // unfiltered sibling scan mistook the "was" price for the top of a range.
+  const d = extractPrice(
+    card(
+      '<div><span>$450.00</span>' +
+        '<div><div><span style="text-decoration: line-through">$500.00</span></div></div></div>',
+    ),
+  );
+
+  assert.ok(Math.abs(d.price - 450) < 0.005, `got ${d.price}`);
+  assert.equal(d.priceHigh, undefined);
+});
+
+// ── bestOffer (Best Offer ENABLED — never "an offer was accepted") ────────────
+
+test('extractItemData flags bestOffer in every supported locale phrasing', () => {
+  // invariant. DE/IT are unverified against a real current-layout page.
+  const phrases = [
+    'or Best Offer',
+    'o Mejor oferta',
+    'ou Faire une offre',
+    'ou Offre directe',
+    'oder Preisvorschlag',
+    "o Proposta d'acquisto",
+  ];
+
+  for (const p of phrases) {
+    const li = card(
+      `<a href="/itm/9">t</a><span>$10.00</span><span>${p}</span>`,
+    );
+    li.dataset.listingid = '9';
+
+    assert.equal(extractItemData(li).bestOffer, true, p);
+  }
+});
+
+test('extractItemData omits bestOffer when Best Offer is not offered', () => {
+  // invariant — absent, not false, so the field only appears when it means something.
+  const li = card(
+    '<a href="/itm/9">t</a><span>$10.00</span><span>Buy It Now</span>',
+  );
+  li.dataset.listingid = '9';
+
+  assert.equal('bestOffer' in extractItemData(li), false);
+});
+
+// ── markup-canary: current layout (captured 2026-07) ──────────────────────────
+
+test('markup-canary: NEW_SOLD_BEST_OFFER — sold + Best Offer, flagged', () => {
+  const d = extractItemData(parse(NEW_SOLD_BEST_OFFER));
+
+  assert.equal(d.id, '278185590765');
+  assert.equal(d.type, 'sold');
+  assert.equal(d.date, '2026-07-15');
+  assert.equal(d.bestOffer, true);
+  assert.ok(Math.abs(d.price - 274.45) < 0.005, `got ${d.price}`); // 160.00 + 114.45
+});
+
+test('markup-canary: NEW_SOLD_DISCOUNT — struck "was" price is not a range', () => {
+  const d = extractItemData(parse(NEW_SOLD_DISCOUNT));
+
+  assert.equal(d.id, '178228743563');
+  assert.equal(d.type, 'sold');
+  assert.ok(Math.abs(d.price - 2299.99) < 0.005, `got ${d.price}`); // free delivery
+  assert.equal(d.priceHigh, undefined); // the struck $5,499.99 must not leak in
+});
+
+test('markup-canary: NEW_ACTIVE_RANGE — single-span range + delivery', () => {
+  const d = extractItemData(parse(NEW_ACTIVE_RANGE));
+
+  assert.equal(d.id, '187472505512');
+  assert.equal(d.type, 'unsold');
+  assert.ok(Math.abs(d.price - 681.57) < 0.005, `got ${d.price}`); // 599.99 + 81.58
+  assert.ok(Math.abs(d.priceHigh - 731.57) < 0.005, `got ${d.priceHigh}`); // 649.99 + 81.58
+});
+
+test('markup-canary: NEW_CAROUSEL_MODULE — a carousel is not a listing', () => {
+  assert.equal(extractItemData(parse(NEW_CAROUSEL_MODULE)), null);
+});
+
+test('extractPrice ignores a single-span range whose high is not above the low', () => {
+  // invariant — a priceHigh <= price makes the item INVISIBLE on the active chart:
+  // renderUnsoldChart suppresses the dot for anything with a priceHigh and the range
+  // line is zero-length/inverted, so it stays checked and counted but unplotted.
+  const same = extractPrice(card('<span>$599.99 - $599.99</span>'));
+
+  assert.ok(Math.abs(same.price - 599.99) < 0.005, `got ${same.price}`);
+  assert.equal(same.priceHigh, undefined);
+
+  const reversed = extractPrice(card('<span>$50.00 - $20.00</span>'));
+
+  assert.ok(Math.abs(reversed.price - 50) < 0.005, `got ${reversed.price}`);
+  assert.equal(reversed.priceHigh, undefined);
+});
+
+test('RANGE_RE is no looser about case than PRICE_RE', () => {
+  // invariant — both are built from PRICE_BODY, so a currency code rejected on its own
+  // must also be rejected inside a range. RANGE_RE used to carry the `i` flag (needed
+  // only for the "to" separator), which silently made its endpoints case-insensitive.
+  assert.equal(extractPrice(card('<span>eur 12,40</span>')), null);
+  assert.equal(extractPrice(card('<span>eur 12,40 - eur 15,00</span>')), null);
+
+  // ...and the separator still tolerates either case.
+  for (const text of ['$8.99 to $18.99', '$8.99 To $18.99']) {
+    const d = extractPrice(card(`<span>${text}</span>`));
+
+    assert.ok(Math.abs(d.price - 8.99) < 0.005, text);
+    assert.ok(Math.abs(d.priceHigh - 18.99) < 0.005, text);
+  }
 });
