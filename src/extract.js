@@ -46,8 +46,10 @@ function extractTitle(card) {
 
   if (heading) {
     const clone = heading.cloneNode(true);
+    // .s-card__new-listing is the "New Listing" badge: a sibling span inside the heading,
+    // so without this it is glued onto the front of the title.
     clone
-      .querySelectorAll(".clipped, [aria-hidden='true']")
+      .querySelectorAll(".clipped, [aria-hidden='true'], .s-card__new-listing")
       .forEach((n) => n.remove());
 
     return clone.textContent.trim() || null;
@@ -90,12 +92,21 @@ const RANGE_RE = new RegExp(
   `^(${PRICE_BODY})\\s*(?:-|–|—|[Tt]o)\\s*(${PRICE_BODY})$`,
 );
 
+// The only text eBay puts between the two ends of a range split across spans: "to", FR
+// "à", DE "bis", IT/ES "a", or nothing at all. Anything else between two prices is a
+// label, e.g. DE "EUR 14,60  UVP  EUR 49,90", where the second figure is a list price.
+const RANGE_WORD_RE = /^(?:to|à|a|bis|-|–|—)?$/i;
+
+// The bid count on an auction card: "3 bids", "0 enchères", "15 Gebote", "2 offerte",
+// "5 pujas" (singular forms too).
+const BID_COUNT_RE = /^\d+\s*(?:bids?|enchères?|Gebote?|offert[ae]|pujas?)$/i;
+
 // Best Offer was ENABLED on this listing. It does NOT mean an offer was accepted:
 // eBay stopped disclosing an accepted offer's amount, or even that one happened, so
 // a sold card shows the LISTING price either way and only the item page reveals the
 // truth. Treat this as "price is uncertain", never as "an offer was accepted".
-// EN/ES/FR/CA-FR are confirmed against fixtures; DE and IT are unverified until an
-// international page on the current layout is captured.
+// All six phrases are confirmed against real cards (the October 2026 captures added DE
+// and IT; CA-FR "ou Offre directe" is in the June fixture).
 const BEST_OFFER_RE =
   /\b(?:or Best Offer|o Mejor oferta|ou Faire une offre|ou Offre directe|oder Preisvorschlag|o Proposta d'acquisto)\b/i;
 
@@ -179,23 +190,48 @@ function extractPrice(card) {
     return null;
   }
 
-  // Old-layout range: a second non-struck price in a sibling span ("$8.99 to $18.99"
-  // spread across three spans in one attribute row). Restricted to LEAVES — wrapper
-  // divs inherit their descendants' textContent, so an unfiltered scan matches the
-  // discount row's wrappers and mistakes the struck "was" price for a range high.
+  // Range split across spans ("$8.99 to $18.99" as three spans in one attribute row): the
+  // first non-struck price after this one in the same row, with only a bare range word (or
+  // nothing) between them. The word check is what keeps a labelled reference price out:
+  // DE rows read "EUR 14,60  UVP  EUR 49,90", and that second figure is not a range high.
+  // Restricted to LEAVES: wrapper divs inherit their descendants' textContent, so an
+  // unfiltered scan matches the discount row's wrappers and mistakes the struck "was"
+  // price for a range high.
   if (high === undefined) {
-    const siblingPrices = leafElements(
-      priceEl.parentElement,
-      'span, div',
-    ).filter(
-      (el) =>
-        el !== priceEl && PRICE_RE.test(el.textContent.trim()) && !isStruck(el),
+    const row = leafElements(priceEl.parentElement, 'span, div');
+    const after = row.slice(row.indexOf(priceEl) + 1);
+    const hiIdx = after.findIndex(
+      (el) => PRICE_RE.test(el.textContent.trim()) && !isStruck(el),
     );
 
-    if (siblingPrices.length > 0) {
-      const h = parseAmount(
-        siblingPrices[siblingPrices.length - 1].textContent,
-      );
+    if (
+      hiIdx >= 0 &&
+      after
+        .slice(0, hiIdx)
+        .every((el) => RANGE_WORD_RE.test(el.textContent.trim()))
+    ) {
+      const h = parseAmount(after[hiIdx].textContent);
+
+      if (!isNaN(h) && h > low) {
+        high = h;
+      }
+    }
+  }
+
+  // Live auction with Buy It Now: the card lists the current bid, then the bid count, then
+  // the Buy It Now price in its own row ("21,25 EUR" / "0 enchères" / "41,92 EUR" / "Achat
+  // immédiat"). Plot the pair as a range, like a variation listing. A sold auction shows
+  // only its final price, so it has no second price to range to.
+  if (high === undefined) {
+    const bidIdx = leaves.findIndex((el) =>
+      BID_COUNT_RE.test(el.textContent.trim()),
+    );
+
+    if (bidIdx > leaves.indexOf(priceEl)) {
+      const bin = leaves
+        .slice(bidIdx + 1)
+        .find((el) => PRICE_RE.test(el.textContent.trim()) && !isStruck(el));
+      const h = bin ? parseAmount(bin.textContent) : NaN;
 
       if (!isNaN(h) && h > low) {
         high = h;
@@ -298,16 +334,21 @@ const MONTH_MAP = {
   mai: 4,
   juin: 5,
   juil: 6,
+  juill: 6, // fr-CA form of July; not yet seen in a capture
   août: 7,
   déc: 11,
-  // Italian (IT)
+  // Italian (IT). eBay.it doubles the consonant: "genn." and "magg." are seen in captures;
+  // febbr. and sett. are the same family, not yet seen.
   gen: 0,
+  genn: 0,
+  febbr: 1,
   mag: 4,
   magg: 4,
   giu: 5,
   lug: 6,
   ago: 7,
   set: 8,
+  sett: 8,
   ott: 9,
   dic: 11,
   // Spanish (ES, MX ES)
@@ -316,6 +357,7 @@ const MONTH_MAP = {
   // German (DE)
   mär: 2,
   märz: 2,
+  mrz: 2, // eBay.de writes "Mrz"
   okt: 9,
   dez: 11,
 };

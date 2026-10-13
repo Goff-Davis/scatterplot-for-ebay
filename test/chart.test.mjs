@@ -8,8 +8,8 @@ import { makeChartStub } from './helpers/chart-stub.mjs';
 // price (range items render a line only, dot suppressed); both charts compute a
 // priceHigh-aware y-max. A fake Chart records the config it was constructed with.
 // Fresh load per test: module-level chartInstance/chartInstanceUnsold persist, so a
-// 2nd renderChart on a shared sandbox would take the in-place update() path
-// (TEST_PLAN.md §5H). Arrays produced inside the vm realm are spread into the test
+// 2nd renderChart on a shared sandbox would take the in-place update() path.
+// Arrays produced inside the vm realm are spread into the test
 // realm before deepEqual (cross-realm prototypes differ); y-max products use a
 // tolerance.
 

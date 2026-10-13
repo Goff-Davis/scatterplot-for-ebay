@@ -41,7 +41,10 @@
       ".gitignore",
       "README.md",
       "ARCHITECTURE.md",
-      "CLAUDE.md"
+      "CLAUDE.md",
+      "CHROME_CONVERSION.md",
+      "examples",
+      "examples/**"
     ]
   }
 }

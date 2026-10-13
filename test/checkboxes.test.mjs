@@ -4,7 +4,7 @@ import { loadModules } from './helpers/load.mjs';
 
 // invariant — the two pure-ish state reconcilers from checkboxes.js. The rest of
 // the file (injectCheckbox / buildPlotAllControl / clearAll) wires DOM events to
-// eBay-specific markup and is out of scope (TEST_PLAN.md §7). The synthetic
+// eBay-specific markup and is out of scope for this section. The synthetic
 // checkbox DOM below is NOT eBay markup, so these stay invariant-safe. extract.js
 // and checkboxes.js are loaded only for their function declarations; only
 // syncPlotAll and reconcileCheckboxes are called.

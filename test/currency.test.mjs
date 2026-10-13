@@ -100,6 +100,19 @@ test('getDefaultCurrencyCode: ebay.ca → CAD', () => {
   assert.equal(s.getDefaultCurrencyCode(), 'CAD');
 });
 
+test('getDefaultCurrencyCode: the French Canadian site (cafr.ebay.ca) → CAD', () => {
+  // It is its own host, not a path on www.ebay.ca, and it still ends in ebay.ca.
+  const s = fresh('https://www.cafr.ebay.ca/sch/i.html?_nkw=headphones');
+  assert.equal(s.getDefaultCurrencyCode(), 'CAD');
+});
+
+test('getDefaultCurrencyCode: ebay.fr, ebay.it, ebay.es → EUR', () => {
+  for (const host of ['www.ebay.fr', 'www.ebay.it', 'www.ebay.es']) {
+    const s = fresh(`https://${host}/sch/i.html`);
+    assert.equal(s.getDefaultCurrencyCode(), 'EUR', host);
+  }
+});
+
 test('getDefaultCurrencyCode: unknown TLD → USD', () => {
   const s = fresh('https://www.ebay.mx/sch/i.html');
   assert.equal(s.getDefaultCurrencyCode(), 'USD');

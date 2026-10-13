@@ -2,3 +2,4 @@ node_modules/
 .claude/
 vendor/
 web-ext-artifacts/
+examples/

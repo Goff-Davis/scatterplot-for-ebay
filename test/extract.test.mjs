@@ -23,6 +23,20 @@ import {
   NEW_SOLD_DISCOUNT,
   NEW_ACTIVE_RANGE,
   NEW_CAROUSEL_MODULE,
+  UK_UNSOLD_RANGE,
+  AU_UNSOLD_RANGE_STRUCK,
+  CA_EN_UNSOLD_RANGE,
+  CA_FR_UNSOLD_RANGE,
+  FR_UNSOLD_RANGE,
+  FR_UNSOLD_AUCTION_BIN,
+  FR_UNSOLD_AUCTION,
+  DE_UNSOLD_RANGE,
+  DE_UNSOLD_UVP,
+  IT_UNSOLD_RANGE,
+  ES_UNSOLD_RANGE_STRUCK,
+  IT_SOLD_BEST_OFFER,
+  US_SOLD_COUPON,
+  US_SOLD_BEST_OFFER_NEW_LISTING,
 } from './fixtures.mjs';
 
 const x = loadExtract();
@@ -38,7 +52,7 @@ const {
   parse,
 } = x;
 
-// Test buckets (TEST_PLAN.md §1):
+// Test buckets:
 //   invariant          — logic that must hold forever; synthetic DOM via card().
 //   documents-behavior — a current/debatable choice pinned so a change is noticed.
 //   markup-canary      — real captured eBay cards; fail loudly when markup shifts.
@@ -695,7 +709,8 @@ test('extractPrice ignores a struck "was" price rather than reading it as a rang
 // ── bestOffer (Best Offer ENABLED — never "an offer was accepted") ────────────
 
 test('extractItemData flags bestOffer in every supported locale phrasing', () => {
-  // invariant. DE/IT are unverified against a real current-layout page.
+  // invariant. Every phrase was copied from a real card (DE and IT are pinned on real
+  // markup by the DE_UNSOLD_UVP and IT_SOLD_BEST_OFFER canaries below).
   const phrases = [
     'or Best Offer',
     'o Mejor oferta',
@@ -788,4 +803,484 @@ test('RANGE_RE is no looser about case than PRICE_RE', () => {
     assert.ok(Math.abs(d.price - 8.99) < 0.005, text);
     assert.ok(Math.abs(d.priceHigh - 18.99) < 0.005, text);
   }
+});
+
+// ── October 2026: s-card layout, all nine sites ───────────────────────────────
+
+const near = (got, want, what) =>
+  assert.ok(Math.abs(got - want) < 0.005, `${what}: got ${got}, want ${want}`);
+
+// eBay puts a real NBSP in a few price and delivery strings (ES "+ 12,03 EUR", CA-FR
+// "expédition (22,98 $C)"). Built from its code point so the file holds no literal one.
+const NBSP = String.fromCharCode(160);
+
+// One <div> row per cell, as on the real cards, so cells sit in different parents.
+const rows = (...cells) =>
+  cells.map((c) => `<div><span>${c}</span></div>`).join('');
+
+// ── extractDate: month vocabulary ────────────────────────────────────────────
+
+test('extractDate reads the two captions that used to fall through (DE Mrz, IT genn.)', () => {
+  // invariant. Both are real sold captions. The unknown month made the caption unparseable,
+  // so the card was typed unsold, dated today, and plotted on the active chart.
+  assert.equal(
+    extractDate(card('<span>Verkauft  22. Mrz 2026</span>')),
+    '2026-03-22',
+  );
+  assert.equal(
+    extractDate(card('<span>Venduti  19 genn. 2025</span>')),
+    '2025-01-19',
+  );
+});
+
+test('extractDate knows all twelve months of every site', () => {
+  // invariant. [sold prefix, day, the twelve month tokens as eBay writes them]. A single
+  // missing token silently turns sold items into active ones, so every month is listed,
+  // not only the ones seen so far. Not seen in any capture (standard forms of the same
+  // family): IT febbr. and sett., CA-FR juill.
+  const sites = {
+    'US/UK/AU/CA-EN': [
+      'Sold',
+      '5',
+      'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec',
+    ],
+    FR: [
+      'Vendu le',
+      '5',
+      'janv. févr. mars avr. mai juin juil. août sept. oct. nov. déc.',
+    ],
+    'CA-FR': [
+      'Vendu',
+      '5',
+      'janv. févr. mars avr. mai juin juill. août sept. oct. nov. déc.',
+    ],
+    DE: ['Verkauft', '5.', 'Jan Feb Mrz Apr Mai Jun Jul Aug Sep Okt Nov Dez'],
+    IT: [
+      'Venduti',
+      '5',
+      'genn. febbr. mar. apr. magg. giu. lug. ago. sett. ott. nov. dic.',
+    ],
+    ES: ['Vendidos', '5', 'ene feb mar abr may jun jul ago sep oct nov dic'],
+  };
+
+  for (const [site, [prefix, day, months]] of Object.entries(sites)) {
+    months.split(' ').forEach((token, i) => {
+      const mm = String(i + 1).padStart(2, '0');
+
+      assert.equal(
+        extractDate(card(`<span>${prefix}  ${day} ${token} 2026</span>`)),
+        `2026-${mm}-05`,
+        `${site}: ${token}`,
+      );
+    });
+  }
+});
+
+// ── extractPrice: ranges split across spans ──────────────────────────────────
+
+test("extractPrice reads a split range in every site's range word", () => {
+  // invariant. [low, word between, high, expected low, expected high]. eBay puts "to",
+  // "à", "bis" or "a" between the two ends, each in its own span.
+  const cases = [
+    ['£5.99', 'to', '£6.99', 5.99, 6.99],
+    ['AU $31.57', 'to', 'AU $54.12', 31.57, 54.12],
+    ['C $239.52', 'to', 'C $268.03', 239.52, 268.03],
+    ['239,52 $C', 'à', '268,03 $C', 239.52, 268.03],
+    ['34,58 EUR', 'à', '35,61 EUR', 34.58, 35.61],
+    ['EUR 12,59', 'bis', 'EUR 12,69', 12.59, 12.69],
+    ['EUR 15,90', 'a', 'EUR 36,90', 15.9, 36.9],
+    ['54,01 EUR', 'a', '59,41 EUR', 54.01, 59.41],
+  ];
+
+  for (const [lo, word, hi, wantLo, wantHi] of cases) {
+    const d = extractPrice(
+      card(
+        `<div><span>${lo}</span><span> ${word} </span><span>${hi}</span></div>`,
+      ),
+    );
+
+    near(d.price, wantLo, `${lo} ${word} ${hi}, low`);
+    near(d.priceHigh, wantHi, `${lo} ${word} ${hi}, high`);
+  }
+});
+
+test('extractPrice does not read a labelled reference price as a range high', () => {
+  // invariant. DE rows read "EUR 14,60  UVP  EUR 49,90": UVP is the manufacturer's list
+  // price, so the second figure is not the top of a range. Only a bare range word, or
+  // nothing, may sit between the two prices.
+  for (const label of ['UVP ', 'RRP ', 'Was ', 'From ']) {
+    const d = extractPrice(
+      card(
+        '<div><span>EUR 14,60</span><span class="su-spacer"></span>' +
+          `<span>${label}</span><span>EUR 49,90</span></div>`,
+      ),
+    );
+
+    near(d.price, 14.6, label);
+    assert.equal(d.priceHigh, undefined, label);
+  }
+});
+
+// ── extractPrice: delivery wordings and coupons ──────────────────────────────
+
+test('extractPrice adds estimated delivery in every wording', () => {
+  // invariant. [price, delivery text, expected total]. Foreign-seller cards say the
+  // delivery cost is an estimate, but it is still added.
+  const cases = [
+    ['EUR 8,27', '+ ca. EUR 16,01 Versand', 24.28],
+    ['EUR 2,09', '+EUR 17,51 di spese di spedizione stimate', 19.6],
+    ['47,26 EUR', `+${NBSP}18,31 EUR de envío estimado`, 65.57],
+    ['AU $75.81', '+AU $37.73 postage estimate', 113.54],
+    ['C $47.17', '+C $40.08 shipping estimate', 87.25],
+    ['47,17 $C', "+40,08 $C de frais d'expédition estimés", 87.25],
+    ['75,45 $C', `+ expédition${NBSP}(29,34 $C)`, 104.79],
+  ];
+
+  for (const [price, shipping, want] of cases) {
+    near(extractPrice(card(rows(price, shipping))).price, want, shipping);
+  }
+});
+
+test('extractPrice adds nothing when postage is not specified', () => {
+  // documents-behavior. AU "Postage not specified" has no amount, so the price stands alone.
+  const d = extractPrice(card(rows('AU $396.88', 'Postage not specified')));
+
+  near(d.price, 396.88, 'price');
+  assert.equal(d.priceHigh, undefined);
+});
+
+test('extractPrice ignores a coupon price in its own row', () => {
+  // documents-behavior. "$24.99" then "$21.24 with coupon": the list price is plotted.
+  // The coupon figure is neither the price nor a range high (it sits in another row).
+  const d = extractPrice(
+    card(
+      rows('$24.99') +
+        '<div><span>$21.24</span><span>with coupon</span></div>' +
+        rows('+$12.08 delivery'),
+    ),
+  );
+
+  near(d.price, 37.07, 'price');
+  assert.equal(d.priceHigh, undefined);
+});
+
+// ── extractTitle ─────────────────────────────────────────────────────────────
+
+test('extractTitle drops the "New listing" badge', () => {
+  // invariant. The badge is a sibling span inside the heading, in the site's language
+  // ("New Listing", "Nouvelle annonce", "Neues Angebot", ...), and used to be glued onto
+  // the front of the title.
+  const li = card(
+    '<div role="heading" aria-level="3">' +
+      '<span class="s-card__new-listing">Nouvelle annonce</span>' +
+      '<span>Real Title</span>' +
+      '<span class="clipped">Opens in a new window or tab</span></div>',
+  );
+
+  assert.equal(extractTitle(li), 'Real Title');
+});
+
+// ── extractPrice: live auctions with Buy It Now ──────────────────────────────
+
+test('extractPrice reads a live auction with Buy It Now as a range from the current bid', () => {
+  // invariant. The card lists the current bid, the bid count, the Buy It Now price in its
+  // own row, a Buy It Now label, then delivery. Delivery is added to both ends, like a
+  // variation range. Each site words the bid count differently.
+  const cases = [
+    // [site, bid, bid count, Buy It Now, label, delivery, low, high]
+    [
+      'US',
+      '$12.00',
+      '3 bids',
+      '$25.00',
+      'Buy It Now',
+      '+$5.00 delivery',
+      17,
+      30,
+    ],
+    [
+      'UK, 1 bid',
+      '£8.00',
+      '1 bid',
+      '£20.00',
+      'Buy It Now',
+      'Free delivery',
+      8,
+      20,
+    ],
+    [
+      'AU, 0 bids',
+      'AU $5.00',
+      '0 bids',
+      'AU $15.00',
+      'Buy It Now',
+      '+AU $4.00 delivery',
+      9,
+      19,
+    ],
+    [
+      'CA-EN',
+      'C $10.00',
+      '2 bids',
+      'C $30.00',
+      'Buy It Now',
+      '+C $5.00 shipping',
+      15,
+      35,
+    ],
+    [
+      'CA-FR',
+      '10,00 $C',
+      '2 enchères',
+      '30,00 $C',
+      'Achat immédiat',
+      `+ expédition${NBSP}(5,00 $C)`,
+      15,
+      35,
+    ],
+    [
+      'FR, NBSP in count',
+      '21,25 EUR',
+      `0${NBSP}enchères`,
+      '41,92 EUR',
+      'Achat immédiat',
+      '+10,00 EUR pour la livraison',
+      31.25,
+      51.92,
+    ],
+    [
+      'DE, Gebote',
+      'EUR 9,00',
+      '5 Gebote',
+      'EUR 19,00',
+      'Sofort-Kaufen',
+      '+EUR 4,00 Lieferung',
+      13,
+      23,
+    ],
+    [
+      'DE, 1 Gebot',
+      'EUR 9,00',
+      '1 Gebot',
+      'EUR 19,00',
+      'Sofort-Kaufen',
+      'Gratis Lieferung',
+      9,
+      19,
+    ],
+    [
+      'IT, offerte',
+      'EUR 9,00',
+      '4 offerte',
+      'EUR 19,00',
+      'Compralo Subito',
+      '+EUR 4,00 per la consegna',
+      13,
+      23,
+    ],
+    [
+      'IT, 1 offerta',
+      'EUR 9,00',
+      '1 offerta',
+      'EUR 19,00',
+      'Compralo Subito',
+      'Consegna gratuita',
+      9,
+      19,
+    ],
+    [
+      'ES, pujas',
+      '9,00 EUR',
+      '5 pujas',
+      '19,00 EUR',
+      '¡Cómpralo ya!',
+      `+${NBSP}4,00 EUR de envío`,
+      13,
+      23,
+    ],
+    [
+      'ES, 1 puja',
+      '9,00 EUR',
+      '1 puja',
+      '19,00 EUR',
+      '¡Cómpralo ya!',
+      'Envío gratis',
+      9,
+      19,
+    ],
+  ];
+
+  for (const [site, bid, count, bin, label, shipping, lo, hi] of cases) {
+    const d = extractPrice(card(rows(bid, count, bin, label, shipping)));
+
+    near(d.price, lo, `${site}, low`);
+    near(d.priceHigh, hi, `${site}, high`);
+  }
+});
+
+test('extractPrice keeps a live auction without Buy It Now as a single price', () => {
+  // invariant
+  const d = extractPrice(card(rows('$12.00', '3 bids', '+$5.00 delivery')));
+
+  near(d.price, 17, 'price');
+  assert.equal(d.priceHigh, undefined);
+});
+
+test('extractPrice shows a sold auction as its final price only', () => {
+  // documents-behavior. "Sold ... 10 bids" is the end of the auction, not a live one, and
+  // eBay shows no Buy It Now price on it, so there is nothing to range to.
+  const d = extractPrice(
+    card(rows('Sold  Oct 12, 2026', '$43.00', '10 bids', '+$9.50 delivery')),
+  );
+
+  near(d.price, 52.5, 'price');
+  assert.equal(d.priceHigh, undefined);
+});
+
+test('extractPrice ignores a struck or not-higher Buy It Now price', () => {
+  // invariant
+  const struck = extractPrice(
+    card(
+      rows('$12.00', '3 bids') +
+        '<div><span style="text-decoration: line-through">$25.00</span></div>',
+    ),
+  );
+  const lower = extractPrice(
+    card(rows('$30.00', '3 bids', '$25.00', 'Buy It Now')),
+  );
+
+  assert.equal(struck.priceHigh, undefined, 'struck');
+  assert.equal(lower.priceHigh, undefined, 'not above the bid');
+});
+
+// ── markup-canary: October 2026, s-card layout ───────────────────────────────
+
+test('markup-canary: UK_UNSOLD_RANGE, £ range with free delivery and a unit-price row', () => {
+  const d = extractItemData(parse(UK_UNSOLD_RANGE));
+
+  assert.equal(d.id, '387277080371');
+  assert.equal(d.type, 'unsold');
+  assert.equal(d.currencySymbol, '£');
+  near(d.price, 5.99, 'price');
+  near(d.priceHigh, 6.99, 'priceHigh');
+});
+
+test('markup-canary: AU_UNSOLD_RANGE_STRUCK, struck price after the high end is ignored', () => {
+  const d = extractItemData(parse(AU_UNSOLD_RANGE_STRUCK));
+
+  assert.equal(d.id, '287169811974');
+  assert.equal(d.type, 'unsold');
+  assert.equal(d.currencySymbol, 'AU$');
+  near(d.price, 31.57, 'price');
+  near(d.priceHigh, 54.12, 'priceHigh'); // not the struck AU $55.81
+});
+
+test('markup-canary: CA_EN_UNSOLD_RANGE and CA_FR_UNSOLD_RANGE, one listing in both languages', () => {
+  for (const html of [CA_EN_UNSOLD_RANGE, CA_FR_UNSOLD_RANGE]) {
+    const d = extractItemData(parse(html));
+
+    assert.equal(d.id, '198652190674');
+    assert.equal(d.type, 'unsold');
+    assert.equal(d.currencySymbol, 'C$');
+    near(d.price, 253.78, 'price'); // 239.52 + 14.26
+    near(d.priceHigh, 282.29, 'priceHigh'); // 268.03 + 14.26
+  }
+});
+
+test('markup-canary: FR_UNSOLD_RANGE, "à" range with free delivery', () => {
+  const d = extractItemData(parse(FR_UNSOLD_RANGE));
+
+  assert.equal(d.id, '406205301484');
+  assert.equal(d.type, 'unsold');
+  near(d.price, 34.58, 'price');
+  near(d.priceHigh, 35.61, 'priceHigh');
+});
+
+test('markup-canary: FR_UNSOLD_AUCTION_BIN, live auction is a range from the bid to Buy It Now', () => {
+  const d = extractItemData(parse(FR_UNSOLD_AUCTION_BIN));
+
+  assert.equal(d.id, '237112788340');
+  assert.equal(d.type, 'unsold');
+  near(d.price, 31.25, 'price'); // bid 21,25 + 10,00 delivery
+  near(d.priceHigh, 51.92, 'priceHigh'); // Buy It Now 41,92 + 10,00 delivery
+});
+
+test('markup-canary: FR_UNSOLD_AUCTION, live auction without Buy It Now stays a single price', () => {
+  const d = extractItemData(parse(FR_UNSOLD_AUCTION));
+
+  assert.equal(d.id, '307213128737');
+  assert.equal(d.type, 'unsold');
+  near(d.price, 5.72, 'price'); // 2,94 + 2,78 delivery
+  assert.equal(d.priceHigh, undefined);
+});
+
+test('markup-canary: DE_UNSOLD_RANGE, "bis" range', () => {
+  const d = extractItemData(parse(DE_UNSOLD_RANGE));
+
+  assert.equal(d.id, '407133053311');
+  assert.equal(d.type, 'unsold');
+  near(d.price, 12.59, 'price');
+  near(d.priceHigh, 12.69, 'priceHigh');
+});
+
+test('markup-canary: DE_UNSOLD_UVP, the list price after "UVP" is not a range high', () => {
+  const d = extractItemData(parse(DE_UNSOLD_UVP));
+
+  assert.equal(d.id, '407023748864');
+  assert.equal(d.type, 'unsold');
+  near(d.price, 14.6, 'price');
+  assert.equal(d.priceHigh, undefined); // EUR 49,90 is the UVP
+  assert.equal(d.bestOffer, true); // "oder Preisvorschlag", confirmed on real markup
+});
+
+test('markup-canary: IT_UNSOLD_RANGE, "a" range', () => {
+  const d = extractItemData(parse(IT_UNSOLD_RANGE));
+
+  assert.equal(d.id, '376038945876');
+  assert.equal(d.type, 'unsold');
+  near(d.price, 15.9, 'price');
+  near(d.priceHigh, 36.9, 'priceHigh');
+});
+
+test('markup-canary: ES_UNSOLD_RANGE_STRUCK, "a" range, struck price ignored, delivery on both ends', () => {
+  const d = extractItemData(parse(ES_UNSOLD_RANGE_STRUCK));
+
+  assert.equal(d.id, '366593258305');
+  assert.equal(d.type, 'unsold');
+  near(d.price, 61.56, 'price'); // 54,01 + 7,55
+  near(d.priceHigh, 66.96, 'priceHigh'); // 59,41 + 7,55, not the struck 62,53
+});
+
+test('markup-canary: IT_SOLD_BEST_OFFER, Venduti + lug. date, Best Offer flagged', () => {
+  const d = extractItemData(parse(IT_SOLD_BEST_OFFER));
+
+  assert.equal(d.id, '326416113275');
+  assert.equal(d.type, 'sold');
+  assert.equal(d.date, '2026-07-20');
+  assert.equal(d.bestOffer, true); // "o Proposta d'acquisto", confirmed on real markup
+  near(d.price, 80.45, 'price'); // 64,85 + 15,60 delivery
+});
+
+test('markup-canary: US_SOLD_COUPON, the coupon price is not the price', () => {
+  const d = extractItemData(parse(US_SOLD_COUPON));
+
+  assert.equal(d.id, '178522312514');
+  assert.equal(d.type, 'sold');
+  assert.equal(d.bestOffer, true);
+  near(d.price, 37.07, 'price'); // $24.99 + $12.08, not the $21.24 coupon price
+  assert.equal(d.priceHigh, undefined);
+});
+
+test('markup-canary: US_SOLD_BEST_OFFER_NEW_LISTING, title has no "New Listing" prefix', () => {
+  const d = extractItemData(parse(US_SOLD_BEST_OFFER_NEW_LISTING));
+
+  assert.equal(d.id, '128131566857');
+  assert.equal(d.type, 'sold');
+  assert.equal(d.date, '2026-10-12');
+  assert.equal(d.bestOffer, true);
+  assert.equal(
+    d.title,
+    'Apple AirPods Pro 3rd Wireless Active Noise Cancelling Earbuds - White MFHP4LL/A',
+  );
+  near(d.price, 171.87, 'price'); // $168.99 + $2.88 delivery
 });

@@ -5,7 +5,7 @@ import { loadModules } from './helpers/load.mjs';
 // invariant — pure geometry: nearestEdge picks the closest of the four viewport
 // edges. The viewport is pinned so the math is deterministic. Only nearestEdge is
 // exercised; setDockSide dereferences panel/toggle DOM and chartInstance, which
-// are not loaded here (TEST_PLAN.md §5G).
+// are not loaded here.
 
 const sandbox = loadModules(['constants.js', 'dock.js'], {
   setup: (s) => {

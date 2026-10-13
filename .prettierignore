@@ -3,3 +3,4 @@ vendor/
 web-ext-artifacts/
 .claude/
 test/fixtures/
+examples/

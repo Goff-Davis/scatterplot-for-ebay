@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadModules } from './helpers/load.mjs';
 import { makeChartStub } from './helpers/chart-stub.mjs';
+import { US_SOLD_COUPON } from './fixtures.mjs';
 
 // invariant — init.js is the entry point: its top-level code runs on load, so
 // loadModules() executing the files in order IS the test. Nothing covered it before,
@@ -106,4 +107,26 @@ test('init: results list present → no error, and the list is wired up', () => 
   // The card got a checkbox and "Plot all" was anchored to the list.
   assert.equal(s.document.querySelectorAll('.ebay-scatter-cb input').length, 1);
   assert.ok(s.document.getElementById('ebay-scatter-plot-all'));
+});
+
+test('init: ul.srp-results with the id on the <li> (s-card layout) is wired up', () => {
+  // eBay serves ul.srp-results > li.s-card[data-listingid] again (October 2026), so the
+  // su-grid list above is not the only shape init.js must handle. A real captured card
+  // keeps this honest.
+  const s = fresh(
+    `<ul class="srp-results srp-list clearfix">${US_SOLD_COUPON}</ul>`,
+  );
+  const list = s.document.querySelector('ul.srp-results');
+
+  assert.equal(
+    placeholderOf(s).classList.contains('ebay-scatter-error'),
+    false,
+  );
+  assert.equal(list.firstElementChild.dataset.scatterInjected, '1');
+  assert.equal(s.document.querySelectorAll('.ebay-scatter-cb input').length, 1);
+  assert.equal(
+    s.document.getElementById('ebay-scatter-plot-all-wrap').nextElementSibling,
+    list,
+    '"Plot all" sits directly before the list',
+  );
 });

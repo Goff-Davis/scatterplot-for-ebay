@@ -6,7 +6,7 @@ import { loadModules } from './helpers/load.mjs';
 // and writes are capped at MAX_ITEMS keeping the MOST RECENT items. Each test gets
 // a fresh sandbox (fresh jsdom → clean localStorage) to avoid cross-test bleed.
 // The "quota exceeded / storage blocked" catch branch is not deterministically
-// triggerable in jsdom, so it is intentionally not covered (TEST_PLAN.md §5F).
+// triggerable in jsdom, so it is intentionally not covered.
 
 const STORAGE_KEY = 'ebay_scatterplot_items'; // mirrors src/constants.js (a const, not exported)
 const fresh = () => loadModules(['constants.js', 'storage.js']);

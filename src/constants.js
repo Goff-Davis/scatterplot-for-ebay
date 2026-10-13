@@ -1,5 +1,5 @@
-// ul.srp-results is the pre-2026 layout; ul.su-grid is the current one. Both are
-// matched so a locale still serving the old markup keeps working.
+// eBay has served both list shapes in 2026: ul.srp-results (June, and again in October)
+// and ul.su-grid (July). Both are matched so whichever one eBay serves keeps working.
 const RESULTS_SEL = 'ul.srp-results, ul.su-grid';
 const STORAGE_KEY = 'ebay_scatterplot_items';
 const MAX_ITEMS = 200;
