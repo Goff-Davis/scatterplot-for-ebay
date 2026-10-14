@@ -3,3 +3,5 @@ node_modules/
 vendor/
 web-ext-artifacts/
 examples/
+.env
+.amo-upload-uuid
