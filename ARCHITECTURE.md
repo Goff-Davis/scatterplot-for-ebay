@@ -6,7 +6,7 @@ This is a Firefox browser extension that adds a price history panel to eBay sear
 
 ## How the extension loads
 
-The extension is declared as a **content script** in `manifest.json`, registered for eBay search-result pages (URLs under `/sch/`) across all supported domains: `ebay.com` (US and Mexico), `ebay.co.uk` (UK), `ebay.de` (Germany), `ebay.ca` (Canada), `ebay.com.au` (Australia and New Zealand), `ebay.fr` (France), `ebay.it` (Italy), and `ebay.es` (Spain). It runs on all matching pages — there is no URL guard. The panel starts minimized by default (only the 📈 toggle tab is visible) and opens on first interaction. Once opened, that state is stored in `localStorage` and restored on the next page load if saved data exists; closing the panel with × clears the flag.
+The extension is declared as a **content script** in `manifest.json`, registered for eBay search-result pages (URLs under `/sch/`) across all supported domains: `ebay.com` (US and Mexico), `ebay.co.uk` (UK), `ebay.de` (Germany), `ebay.ca` (Canada; the French site runs on its own host, `cafr.ebay.ca`, which the same `*.ebay.ca` pattern matches), `ebay.com.au` (Australia and New Zealand), `ebay.fr` (France), `ebay.it` (Italy), and `ebay.es` (Spain). It runs on all matching pages — there is no URL guard. The panel starts minimized by default (only the 📈 toggle tab is visible) and opens on first interaction. Once opened, that state is stored in `localStorage` and restored on the next page load if saved data exists; closing the panel with × clears the flag.
 
 The extension's own code has no build step — Firefox loads the `src/` files directly, in the order listed in `manifest.json`, with no bundler or transpiler. The third-party libraries it ships (Chart.js and easy-currencies) are _vendored_ into `vendor/` so they travel with the extension; see _Dependencies and vendoring_ below. Packaging the whole thing into a distributable `.zip` is done with `web-ext` (`npm run build`).
 
@@ -31,7 +31,7 @@ src/
   dock.js              Track and change which edge the panel is docked to
   checkboxes.js        Per-item checkboxes, "Plot all" control
   panel.js             Build the panel DOM and handle all mouse interaction
-  init.js              Entry point — startup sequence, panel state restore, scroll observers
+  init.js              Entry point: startup sequence, panel state restore, refreshList (re-wires when eBay swaps the results in place)
 test/
   extract.test.mjs     Unit tests for the extraction logic + markup-canary fixtures
   storage.test.mjs     loadItems/saveItems degradation + MAX_ITEMS cap
@@ -41,7 +41,8 @@ test/
                        coexistence, sold-only Best Offer warning
   currency.test.mjs    convertPrice math + getDefaultCurrencyCode's TLD lookup (incl. cafr.ebay.ca)
   panel.test.mjs       buildPanel wiring: font-size input + dark/light theme toggle
-  init.test.mjs        The startup sequence, incl. the layout-failure message
+  init.test.mjs        The startup sequence, the layout-failure message, and re-wiring
+                       after eBay swaps the results region in place
   helpers/load.mjs     Loads any src/ files into a shared jsdom context for testing
   helpers/chart-stub.mjs  Fake Chart.js constructor that records its config
   fixtures/            Real eBay card HTML (sold + active) used by the tests
@@ -99,7 +100,7 @@ Rather than relying on eBay's CSS class names (which change frequently), the ext
 
 **Finding the card.** eBay has served two search-page shapes in 2026, and the extension handles both. In the s-card shape (June, and again in October) the results list is `ul.srp-results` and `data-listingid` sits on the `<li>` itself. In the su-grid shape (July) the list is `ul.su-grid` and `data-listingid` sits on an inner `div.su-item-card`, so the `<li>` is just a grid slot. As of the October captures every supported site serves the s-card shape again. `listingRoot()` resolves whichever element actually carries the listing, and everything else reads from there. It deliberately returns nothing for an `<li>` holding _several_ listings: the related-items carousels are also `<li>`s in that same list, and treating one as a single card made the item-ID fallback pick up the first item inside the carousel and plot it as if the user had chosen it.
 
-**Finding the list.** A class rename doesn't degrade the extension, it switches it off completely — which is what happened when `srp-results` disappeared. So `findResultsList()` tries the known selectors, then falls back to whichever `<ul>` on the page contains the most listing cards. Carousels nest their own `<ul>`, so their items count toward the carousel rather than the results list, and the real list wins comfortably (60 cards vs. 10 for the nearest runner-up on a captured page).
+**Finding the list.** A class rename doesn't degrade the extension, it switches it off completely — which is what happened when `srp-results` disappeared. So `findResultsList()` tries the known selectors, then falls back to whichever `<ul>` on the page contains the most listing cards. Carousels nest their own `<ul>`, so their items count toward the carousel rather than the results list, and the real list wins comfortably (60 cards vs. 10 for the nearest runner-up on a captured page). It runs again on every DOM change, because eBay can replace the list in place (see _Handling eBay's dynamic page updates_).
 
 Per-card heuristics:
 
@@ -133,7 +134,7 @@ The "Plot all" checkbox sits above the results list and has three visual states 
 | Indeterminate (filled bar) | Some items selected      |
 | Checked                    | All valid items selected |
 
-`syncPlotAll()` is called after every state change to keep the three-state checkbox accurate.
+`syncPlotAll()` is called after every state change to keep the three-state checkbox accurate. The control is bound to the `<ul>` it was built for, so it is rebuilt whenever that list is replaced (see _Handling eBay's dynamic page updates_).
 
 ## Chart
 
@@ -149,9 +150,9 @@ The standard chart entry point for UI event handlers is `renderChartConverted(it
 
 ## Handling eBay's dynamic page updates
 
-As you scroll, eBay appends new listing cards to the results list without a full page reload (infinite scroll). A single `MutationObserver` on that element watches for child-list changes; on each one it re-scans the direct `<li>` children that haven't been processed yet and injects checkboxes. The same pass retries any listing card whose price or date rendered late.
+The content script runs once per page load, but the results list does not stay put. eBay's search page has a client-side navigation layer (x-wire, found by reading the search page's client chunks, `large-*.js` and `common-*.js` under `ir.ebaystatic.com/rs/c/srpnweb/`, because a saved page is the server's raw HTML and shows nothing of it): clicking a filter (including "Sold items"), a sort option, or a pagination link fetches the next page's HTML fragments and replaces whole regions of the page in place (`[wire-region]` elements) while updating the URL with `pushState`. The list lives in `<div wire-region="results">`, so after any of those clicks the old `<ul>`, its cards, the checkboxes the extension injected and its "Plot all" control (which sits beside the `<ul>` in the same region) are all discarded, and no page load happens to start the content script again. Before the extension learned about this, sold listings reached through the "Sold items" filter had no checkboxes and no "Plot all" until a manual reload.
 
-Filtering, sorting, and pagination on the sold-search page trigger full page navigations rather than in-place DOM swaps, so the extension simply re-initializes. This has been verified for pagination specifically: clicking to the next page reloads the page, and because selections live in `localStorage`, everything already plotted survives the reload and stays on the chart while items from the newly loaded page can be added to the same plot — so you can page through results and accumulate points across multiple pages. No extra observer is needed for in-place list replacement (which eBay was confirmed never to do here).
+So `refreshList()` in `src/init.js` runs once at load and then from a single `MutationObserver` on `<body>`. It is idempotent, so it costs almost nothing when nothing needs doing and cannot loop on the changes its own injection makes. Each run finds the current list; clears the "could not find listings" error if the list was missing at load; injects checkboxes into any direct `<li>` that has none yet (infinite scroll, a swapped-in page, and cards whose price or date rendered late); and rebuilds the "Plot all" control when it is missing or was built for a different `<ul>`, because its handler is bound to the list it was built for. Only the first wire-up draws the chart; a swap leaves the saved items alone, and a redraw would drop any currency conversion already applied. Selections live in `localStorage`, so everything already plotted survives a swap and items from the new page can be added to the same plot, which is how you page through results and accumulate points across multiple pages.
 
 ## Dependencies and vendoring
 
@@ -181,7 +182,7 @@ There's no bundler for the extension's own code, but `web-ext` (Mozilla's tool) 
 
 ## Testing
 
-Unit tests (`npm test`) lock down the core logic that must stay stable regardless of eBay's markup: extraction (`src/extract.js`), the storage contract (`src/storage.js`), dock geometry (`nearestEdge`), chart data-shaping math (`src/chart.js`), the checkbox state reconcilers (`src/checkboxes.js`), and the panel's header wiring — font-size input and theme toggle (`src/panel.js`). Coverage is deliberately scoped: every test is one of three buckets — **invariant** (synthetic DOM, must hold forever), **documents-behavior** (a current choice pinned so a change is noticed), or **markup-canary** (a real captured card, kept few, fails loudly when the markup shifts).
+Unit tests (`npm test`) lock down the core logic that must stay stable regardless of eBay's markup: extraction (`src/extract.js`), the storage contract (`src/storage.js`), dock geometry (`nearestEdge`), chart data-shaping math (`src/chart.js`), the checkbox state reconcilers (`src/checkboxes.js`), currency conversion and host lookup (`src/currency.js`), the panel's header wiring — font-size input and theme toggle (`src/panel.js`), and the startup sequence including how it re-wires after eBay swaps the results in place (`src/init.js`). Coverage is deliberately scoped: every test is one of three buckets — **invariant** (synthetic DOM, must hold forever), **documents-behavior** (a current choice pinned so a change is noticed), or **markup-canary** (a real captured card, kept few, fails loudly when the markup shifts).
 
 Because the `src/` files have no `export`s (they share one content-script scope), the tests load the real source into a jsdom-backed `node:vm` sandbox and call its functions directly — running the exact code that ships, with no test-only exports. `test/helpers/load.mjs` exposes `loadModules(files, { url, setup })`, which loads any combination of `src/` files into one shared context (separate `runInContext` calls share top-level `const`/`let`, mirroring the content-script scope); chart math is exercised against a fake Chart.js constructor (`test/helpers/chart-stub.mjs`).
 

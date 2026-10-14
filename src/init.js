@@ -42,9 +42,10 @@ function findResultsList() {
   return best;
 }
 
-const container = findResultsList();
+// What the placeholder said before the layout error replaced it.
+let placeholderDefault = '';
 
-if (!container) {
+function showLayoutError() {
   // Report in the placeholder, not #ebay-scatter-status: the status span is a flex
   // item sharing a 320px row with "Clear All" (a 150px column when docked top/bottom)
   // and belongs to renderChart's item count, which would overwrite this. The
@@ -52,6 +53,7 @@ if (!container) {
   // it has room to wrap and no longer contradicts the error by inviting the user to
   // check items that have no checkboxes.
   const placeholder = document.getElementById('ebay-scatter-placeholder');
+  placeholderDefault = placeholder.textContent;
   placeholder.textContent = '';
   placeholder.classList.add('ebay-scatter-error');
 
@@ -67,27 +69,91 @@ if (!container) {
 
   placeholder.append(msg, report);
   console.warn('[ebay-scatter] Results container not found');
-} else {
-  const savedItemsMap = new Map(
-    loadItems().map((i) => [`${i.id}:${i.type || 'sold'}`, i]),
+}
+
+// The list can turn up after load, or arrive via an in-place swap into a results page,
+// so the error has to be able to go away again.
+function clearLayoutError() {
+  const placeholder = document.getElementById('ebay-scatter-placeholder');
+
+  if (!placeholder.classList.contains('ebay-scatter-error')) {
+    return;
+  }
+
+  placeholder.classList.remove('ebay-scatter-error');
+  placeholder.textContent = placeholderDefault;
+}
+
+// The results <ul> that is currently wired up. eBay no longer reloads the page for
+// filters, sort or pagination: its x-wire navigation fetches an HTML fragment and swaps
+// whole regions in place ([wire-region="results"] holds the list, and our "Plot all"
+// control beside it), so the <ul>, its cards and everything injected into them are
+// thrown away while this script never runs again. refreshList() therefore runs on every
+// DOM change under <body> and re-wires whenever the list it knows about has been replaced.
+let wiredList = null;
+
+// The list the current "Plot all" control was built for.
+let controlList = null;
+
+// Idempotent: it does nothing when the list, its cards and "Plot all" are all in place,
+// so it is cheap to call on every mutation, including the ones our own injection causes.
+function refreshList() {
+  const list = findResultsList();
+
+  if (!list) {
+    return false;
+  }
+
+  const first = wiredList === null;
+
+  if (list !== wiredList) {
+    wiredList = list;
+    clearLayoutError();
+  }
+
+  // Cards with no checkbox yet: infinite scroll, a swapped-in page, or a card whose
+  // price/date rendered late and failed extraction on an earlier pass (left unmarked).
+  const pending = list.querySelectorAll(
+    ':scope > li:not([data-scatter-injected])',
   );
-  container
-    .querySelectorAll(':scope > li')
-    .forEach((card) => injectCheckbox(card, savedItemsMap));
-  buildPlotAllControl(container);
-  renderChart(loadItems());
+
+  if (pending.length) {
+    const savedItemsMap = new Map(
+      loadItems().map((i) => [`${i.id}:${i.type || 'sold'}`, i]),
+    );
+    pending.forEach((card) => injectCheckbox(card, savedItemsMap));
+  }
+
+  // "Plot all" sits beside the list, so it leaves with the region when eBay swaps it. It
+  // is also bound to the list it was built for, so it must be rebuilt when only the <ul>
+  // is replaced and the control (in the surviving parent) stays behind.
+  const control = document.getElementById('ebay-scatter-plot-all-wrap');
+
+  if (!control || controlList !== list || !list.parentNode.contains(control)) {
+    if (control) {
+      control.remove();
+    }
+
+    buildPlotAllControl(list);
+    controlList = list;
+  }
+
+  // Only the first wire-up draws the chart: a swap leaves the saved items, and any
+  // currency conversion already applied, exactly as they were.
+  if (first) {
+    renderChart(loadItems());
+  }
+
   syncPlotAll();
 
-  // Infinite scroll appends new <li> cards to the same list. On each change,
-  // re-scan direct children that haven't been processed yet — this picks up
-  // new cards and retries listing cards whose price/date rendered late.
-  // (Filter, sort, and pagination trigger full page navigations, which
-  // re-initialize the extension, so no in-place-swap observer is needed.)
-  const listObserver = new MutationObserver(() => {
-    container
-      .querySelectorAll(':scope > li:not([data-scatter-injected])')
-      .forEach((card) => injectCheckbox(card));
-    syncPlotAll();
-  });
-  listObserver.observe(container, { childList: true });
+  return true;
 }
+
+if (!refreshList()) {
+  showLayoutError();
+}
+
+new MutationObserver(refreshList).observe(document.body, {
+  childList: true,
+  subtree: true,
+});

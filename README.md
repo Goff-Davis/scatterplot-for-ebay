@@ -2,7 +2,7 @@
 
 A Firefox extension that adds a price history panel to eBay search pages. Select listings to plot their sale prices — sold listings are charted by sale date; active listings are shown in a price-distribution view.
 
-Supports all major eBay sites: ebay.com, ebay.co.uk, ebay.de, ebay.ca, ebay.com.au, ebay.fr, ebay.it, and ebay.es.
+Supports all major eBay sites: ebay.com, ebay.co.uk, ebay.de, ebay.ca (English, and French at cafr.ebay.ca), ebay.com.au, ebay.fr, ebay.it, and ebay.es.
 
 ## Features
 
@@ -16,7 +16,7 @@ Supports all major eBay sites: ebay.com, ebay.co.uk, ebay.de, ebay.ca, ebay.com.
 - **Dark / light theme** — toggle in the panel header
 - **Adjustable text size** — set the panel font size from the header
 - **Persists across page loads** — selected items, dock position, panel open/closed state, theme, and font size are saved in `localStorage`
-- Handles infinite scroll and pagination automatically
+- Handles infinite scroll, pagination, and in-page filter or sort changes (such as switching to "Sold items") automatically
 
 ## Installation
 
@@ -41,6 +41,8 @@ The extension will remain active until Firefox is closed. Repeat step 4 after re
 
 **Sold vs. active listings:** Sold listings are charted by sale date. Active (unsold) listings appear in a separate "Active Listings" strip chart sorted by price — the x-axis spreads items horizontally so price clusters are visible. Both chart sections appear in the same panel when you have both types selected.
 
+**Price ranges:** A listing priced as a range (for example a multi-variation listing at $8.99 to $18.99) is drawn as a vertical line from its lowest to its highest price instead of a single dot. A live auction that also has a Buy It Now price is drawn the same way, from the current bid up to the Buy It Now price, since the final price will land somewhere in between. Delivery cost is added to both ends. A sold auction shows only its final price.
+
 **Best Offer listings:** If a sold listing had Best Offer enabled, a warning appears under its Plot box. eBay shows the seller's asking price on these cards, but if the seller accepted an offer the item actually sold for less — and the search page doesn't say which happened. Open the listing to see the real figure. Active listings don't get the warning: their price is simply what the seller is asking.
 
 **Across pages:** Your selections are saved, so you can move to the next page of results and keep adding listings — the chart accumulates points from every page you visit.
@@ -61,6 +63,8 @@ No build step is needed to develop. After editing any file in `src/`:
 2. Find the extension and click **Reload**
 
 Run the unit tests with `npm test` (covers extraction, storage, dock geometry, chart math, currency conversion, checkbox state, panel header wiring, and the startup sequence).
+
+Test fixtures are real listing cards cut out of saved eBay pages with `node scripts/extract-fixture.mjs` (see [ARCHITECTURE.md](ARCHITECTURE.md)).
 
 Code style is handled by Prettier — run `npm run format` after editing. `npm run lint` checks the extension against Firefox Add-on policies, not code style.
 

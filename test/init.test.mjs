@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadModules } from './helpers/load.mjs';
 import { makeChartStub } from './helpers/chart-stub.mjs';
-import { US_SOLD_COUPON } from './fixtures.mjs';
+import { US_SOLD_COUPON, US_SOLD_BEST_OFFER_NEW_LISTING } from './fixtures.mjs';
 
 // invariant — init.js is the entry point: its top-level code runs on load, so
 // loadModules() executing the files in order IS the test. Nothing covered it before,
@@ -129,4 +129,148 @@ test('init: ul.srp-results with the id on the <li> (s-card layout) is wired up',
     list,
     '"Plot all" sits directly before the list',
   );
+});
+
+// ── eBay swaps the results region in place ────────────────────────────────────
+// eBay's x-wire navigation (filters, sort, pagination, the "Sold items" filter) fetches
+// an HTML fragment and replaces whole [wire-region] elements without a page load, so the
+// <ul>, its cards and our injected controls are thrown away while the content script
+// never runs again. These tests are the reason refreshList() watches the whole <body>.
+
+const resultsRegion = (cards) =>
+  `<div wire-region="results"><ul class="srp-results srp-list clearfix">${cards}</ul></div>`;
+
+// Mirrors x-wire's updateRegions(): the new region goes in before the old one, which is
+// then removed.
+const swapRegion = (s, cards) => {
+  const old = s.document.querySelector('[wire-region="results"]');
+  const tpl = s.document.createElement('template');
+
+  tpl.innerHTML = resultsRegion(cards);
+  old.parentNode.insertBefore(tpl.content.firstElementChild, old);
+  old.remove();
+};
+
+// MutationObserver callbacks are microtasks, so one macrotask turn lets them all run. (A
+// callback that kept mutating the DOM would starve this and hang the test.)
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+const boxIds = (s) =>
+  Array.from(s.document.querySelectorAll('.ebay-scatter-cb input')).map(
+    (cb) => cb.dataset.itemId,
+  );
+
+const controls = (s) =>
+  s.document.querySelectorAll('#ebay-scatter-plot-all-wrap');
+
+test('init: when eBay swaps the results region in place, the new list is wired up', async () => {
+  const s = fresh(resultsRegion(US_SOLD_COUPON));
+
+  assert.deepEqual(boxIds(s), ['178522312514']);
+
+  swapRegion(s, US_SOLD_BEST_OFFER_NEW_LISTING);
+  await settle();
+
+  // Only the new page's card: the old one left with its region.
+  assert.deepEqual(boxIds(s), ['128131566857']);
+  assert.equal(controls(s).length, 1);
+  assert.equal(
+    controls(s)[0].nextElementSibling,
+    s.document.querySelector('ul.srp-results'),
+    '"Plot all" sits directly before the new list',
+  );
+});
+
+test('init: when only the <ul> is replaced, "Plot all" is rebuilt for the new list', async () => {
+  // The control lives in the parent, which survives, but it is bound to the list it was
+  // built for: left alone it would act on a detached <ul> and plot nothing.
+  const s = fresh(resultsRegion(US_SOLD_COUPON));
+  const next = s.document.createElement('ul');
+
+  next.className = 'srp-results srp-list clearfix';
+  next.innerHTML = US_SOLD_BEST_OFFER_NEW_LISTING;
+  s.document.querySelector('ul.srp-results').replaceWith(next);
+  await settle();
+
+  assert.equal(controls(s).length, 1);
+
+  const all = s.document.getElementById('ebay-scatter-plot-all');
+
+  all.checked = true;
+  all.dispatchEvent(new s.window.Event('change'));
+
+  assert.deepEqual(
+    [...s.loadItems()].map((i) => i.id),
+    ['128131566857'],
+  );
+});
+
+test('init: a list that turns up after load clears the layout error and is wired up', async () => {
+  const s = fresh(); // nothing to find yet
+
+  assert.ok(placeholderOf(s).classList.contains('ebay-scatter-error'));
+
+  s.document.body.insertAdjacentHTML(
+    'beforeend',
+    resultsRegion(US_SOLD_COUPON),
+  );
+  await settle();
+
+  const placeholder = placeholderOf(s);
+
+  assert.equal(placeholder.classList.contains('ebay-scatter-error'), false);
+  assert.match(placeholder.textContent, /Check items below/);
+  assert.equal(placeholder.querySelector('a'), null);
+  assert.deepEqual(boxIds(s), ['178522312514']);
+});
+
+test('init: "Plot all" is put back if eBay re-renders its region without it', async () => {
+  const s = fresh(resultsRegion(US_SOLD_COUPON));
+
+  controls(s)[0].remove();
+  await settle();
+
+  assert.equal(controls(s).length, 1);
+  assert.equal(
+    controls(s)[0].nextElementSibling,
+    s.document.querySelector('ul.srp-results'),
+  );
+});
+
+test('init: cards appended to the list (infinite scroll) get checkboxes', async () => {
+  const s = fresh(resultsRegion(US_SOLD_COUPON));
+
+  s.document
+    .querySelector('ul.srp-results')
+    .insertAdjacentHTML('beforeend', US_SOLD_BEST_OFFER_NEW_LISTING);
+  await settle();
+
+  assert.deepEqual(boxIds(s), ['178522312514', '128131566857']);
+});
+
+test('init: unrelated DOM changes leave the wiring alone (no duplicates)', async () => {
+  const s = fresh(resultsRegion(US_SOLD_COUPON));
+
+  for (let i = 0; i < 3; i++) {
+    s.document.body.insertAdjacentHTML('beforeend', '<div class="ad">x</div>');
+    await settle();
+  }
+
+  assert.equal(controls(s).length, 1);
+  assert.deepEqual(boxIds(s), ['178522312514']);
+});
+
+test('init: a swap does not redraw the chart', async () => {
+  // documents-behavior. Only the first wire-up draws it. A swap leaves the saved items
+  // untouched, and a redraw would drop any currency conversion already applied.
+  const s = fresh(resultsRegion(US_SOLD_COUPON));
+  let draws = 0;
+
+  s.renderChart = () => {
+    draws++;
+  };
+  swapRegion(s, US_SOLD_BEST_OFFER_NEW_LISTING);
+  await settle();
+
+  assert.equal(draws, 0);
 });
